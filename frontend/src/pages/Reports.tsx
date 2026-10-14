@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
+import toast from 'react-hot-toast';
 import { Plus, Edit, Trash2, Search, Clock, FileText, CheckCircle, Send, Link2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import SlidePanel from '../components/SlidePanel';
+import FileAttachments from '../components/FileAttachments';
 
 export default function Reports() {
   const { user } = useAuth();
@@ -33,12 +35,30 @@ export default function Reports() {
 
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/reports/${editing.id}`, data) : api.post('/reports', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reports'] }); closePanel(); },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['reports'] });
+      if (editing) {
+        toast.success('Report updated');
+        closePanel();
+      } else {
+        const created = res.data;
+        toast.success('Report submitted — attach files below if needed');
+        setEditing(created);
+        setForm({
+          ...created,
+          reportDate: created.reportDate?.split('T')[0] || '',
+          taskId: created.taskId || '',
+          workId: created.workId || '',
+        });
+      }
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save report'),
   });
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/reports/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['reports'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reports'] }); toast.success('Report deleted'); },
+    onError: () => toast.error('Failed to delete report'),
   });
 
   const openAdd = () => {
@@ -303,11 +323,19 @@ export default function Reports() {
             <textarea className="form-input" rows={4} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} required placeholder="Describe the work done..." />
           </div>
 
+          {editing && (
+            <div className="border border-gray-100 rounded-xl p-4 bg-gray-50">
+              <FileAttachments module="report" entityId={editing.id} />
+            </div>
+          )}
+
           <div className="flex gap-3 pt-2 border-t border-gray-100">
             <button type="submit" disabled={save.isPending} className="btn-primary flex-1 py-2.5">
               {save.isPending ? 'Saving...' : editing ? 'Update Report' : 'Submit Report'}
             </button>
-            <button type="button" onClick={closePanel} className="btn-secondary flex-1 py-2.5">Cancel</button>
+            <button type="button" onClick={closePanel} className="btn-secondary flex-1 py-2.5">
+              {editing ? 'Close' : 'Cancel'}
+            </button>
           </div>
         </form>
       </SlidePanel>
