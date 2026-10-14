@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { Plus, Edit, Trash2, Search, Clock, CheckCircle, Loader, Calendar, Link2 } from 'lucide-react';
 import SlidePanel from '../components/SlidePanel';
+import FileAttachments from '../components/FileAttachments';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Work {
@@ -57,7 +58,24 @@ export default function Works() {
 
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/works/${editing.id}`, data) : api.post('/works', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['works'] }); toast.success(editing ? 'Work updated' : 'Work logged'); closePanel(); },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['works'] });
+      if (editing) {
+        toast.success('Work updated');
+        closePanel();
+      } else {
+        // Stay open in edit mode so the user can attach files
+        const created = res.data;
+        toast.success('Work logged — attach files below if needed');
+        setEditing(created);
+        setForm({
+          ...created,
+          workDate: created.workDate?.split('T')[0] || '',
+          taskId: created.taskId || '',
+          clientWorkId: created.clientWorkId || '',
+        });
+      }
+    },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save'),
   });
 
@@ -354,11 +372,19 @@ export default function Works() {
             />
           </div>
 
+          {editing && (
+            <div className="border border-gray-100 rounded-xl p-4 bg-gray-50">
+              <FileAttachments module="work" entityId={editing.id} />
+            </div>
+          )}
+
           <div className="flex gap-3 pt-2 border-t border-gray-100">
             <button type="submit" disabled={save.isPending} className="btn-primary flex-1 py-2.5">
               {save.isPending ? 'Saving...' : editing ? 'Update Work' : 'Log Work'}
             </button>
-            <button type="button" onClick={closePanel} className="btn-secondary flex-1 py-2.5">Cancel</button>
+            <button type="button" onClick={closePanel} className="btn-secondary flex-1 py-2.5">
+              {editing ? 'Close' : 'Cancel'}
+            </button>
           </div>
         </form>
       </SlidePanel>
