@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
@@ -85,13 +86,15 @@ app.use('/api/notifications', apiLimiter, notificationRoutes);
 app.use('/api/activity-logs', apiLimiter, activityLogRoutes);
 app.use('/api/files', apiLimiter, fileRoutes);
 
-// Serve frontend static build in production
+// Serve frontend static build in production (if present)
 if (process.env.NODE_ENV === 'production') {
   const frontendDist = path.join(__dirname, '../../frontend/dist');
-  app.use(express.static(frontendDist));
-  app.get('*', (_req: Request, res: Response) => {
-    res.sendFile(path.join(frontendDist, 'index.html'));
-  });
+  if (fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+    app.get('{*path}', (_req: Request, res: Response) => {
+      res.sendFile(path.join(frontendDist, 'index.html'));
+    });
+  }
 }
 
 // Global error handler

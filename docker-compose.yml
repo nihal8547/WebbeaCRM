@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: webbeacrm-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: webbeacrm
+      POSTGRES_PASSWORD: webbeacrm_secure_pass_2026!
+      POSTGRES_DB: webbeacrm
+    volumes:
+      - webbeacrm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webbeacrm -d webbeacrm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - webbeacrm-network
+
+  server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: webbeacrm-backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3031:5000"
+    environment:
+      DATABASE_URL: "postgresql://webbeacrm:webbeacrm_secure_pass_2026!@postgres:5432/webbeacrm"
+      JWT_SECRET: "webbeacrm_jwt_super_secret_production_key_2026"
+      PORT: "5000"
+      NODE_ENV: "production"
+      ALLOWED_ORIGINS: "https://crm.webbea.qa,http://crm.webbea.qa"
+    volumes:
+      - webbeacrm_uploads:/usr/src/app/uploads
+    networks:
+      - webbeacrm-network
+
+  client:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: webbeacrm-frontend
+    restart: always
+    ports:
+      - "127.0.0.1:3030:80"
+    depends_on:
+      - server
+    networks:
+      - webbeacrm-network
+
+volumes:
+  webbeacrm_postgres_data:
+  webbeacrm_uploads:
+
+networks:
+  webbeacrm-network:
+    driver: bridge
