@@ -12,6 +12,7 @@ import TaskGroups from './pages/TaskGroups';
 import Quotations from './pages/Quotations';
 import Payments from './pages/Payments';
 import Reports from './pages/Reports';
+import Works from './pages/Works';
 import Users from './pages/Users';
 import Roles from './pages/Roles';
 
@@ -42,6 +43,7 @@ function AppRoutes() {
       <Route path="/quotations" element={<PrivateRoute><Quotations /></PrivateRoute>} />
       <Route path="/payments" element={<PrivateRoute><Payments /></PrivateRoute>} />
       <Route path="/reports" element={<PrivateRoute><Reports /></PrivateRoute>} />
+      <Route path="/works" element={<PrivateRoute><Works /></PrivateRoute>} />
       <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
       <Route path="/roles" element={<PrivateRoute><Roles /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" />} />

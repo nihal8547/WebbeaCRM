@@ -17,7 +17,11 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
   const reports = await prisma.workReport.findMany({
     where,
-    include: { user: { select: { id: true, name: true } } },
+    include: {
+      user: { select: { id: true, name: true } },
+      task: { select: { id: true, title: true } },
+      work: { select: { id: true, title: true } },
+    },
     orderBy: { reportDate: 'desc' },
   });
   res.json(reports);
@@ -25,12 +29,18 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const data = { ...req.body, userId: req.user!.id };
+    const data: any = { ...req.body, userId: req.user!.id };
     if (data.reportDate) data.reportDate = new Date(data.reportDate);
     if (data.hoursWorked) data.hoursWorked = Number(data.hoursWorked);
+    if (data.taskId) data.taskId = Number(data.taskId); else delete data.taskId;
+    if (data.workId) data.workId = Number(data.workId); else delete data.workId;
     const report = await prisma.workReport.create({
       data,
-      include: { user: { select: { id: true, name: true } } },
+      include: {
+        user: { select: { id: true, name: true } },
+        task: { select: { id: true, title: true } },
+        work: { select: { id: true, title: true } },
+      },
     });
     res.json(report);
   } catch (err) {
@@ -41,13 +51,20 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const data = { ...req.body };
+    const data: any = { ...req.body };
     if (data.reportDate) data.reportDate = new Date(data.reportDate);
     if (data.hoursWorked) data.hoursWorked = Number(data.hoursWorked);
+    if (data.taskId) data.taskId = Number(data.taskId); else data.taskId = null;
+    if (data.workId) data.workId = Number(data.workId); else data.workId = null;
+    delete data.user; delete data.task; delete data.work;
     const report = await prisma.workReport.update({
       where: { id: Number(req.params.id) },
       data,
-      include: { user: { select: { id: true, name: true } } },
+      include: {
+        user: { select: { id: true, name: true } },
+        task: { select: { id: true, title: true } },
+        work: { select: { id: true, title: true } },
+      },
     });
     res.json(report);
   } catch {

@@ -15,6 +15,7 @@ import taskGroupRoutes from './routes/taskGroups';
 import quotationRoutes from './routes/quotations';
 import paymentRoutes from './routes/payments';
 import reportRoutes from './routes/reports';
+import workRoutes from './routes/works';
 import dashboardRoutes from './routes/dashboard';
 
 const app = express();
@@ -32,6 +33,7 @@ app.use('/api/task-groups', taskGroupRoutes);
 app.use('/api/quotations', quotationRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/works', workRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 const PORT = process.env.PORT || 5000;

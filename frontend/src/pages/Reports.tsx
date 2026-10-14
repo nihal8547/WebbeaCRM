@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
-import { Plus, Edit, Trash2, Search, Clock, FileText, CheckCircle, Send } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Clock, FileText, CheckCircle, Send, Link2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import SlidePanel from '../components/SlidePanel';
 
 export default function Reports() {
   const { user } = useAuth();
@@ -11,7 +12,7 @@ export default function Reports() {
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [sortBy, setSortBy] = useState('reportDate_desc');
-  const [modal, setModal] = useState(false);
+  const [panel, setPanel] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState<any>({ title: '', type: 'daily', description: '', hoursWorked: '', status: 'submitted', reportDate: new Date().toISOString().split('T')[0] });
 
@@ -20,9 +21,19 @@ export default function Reports() {
     queryFn: () => api.get('/reports').then((r) => r.data),
   });
 
+  const { data: tasks = [] } = useQuery<any[]>({
+    queryKey: ['tasks'],
+    queryFn: () => api.get('/tasks').then((r) => r.data),
+  });
+
+  const { data: works = [] } = useQuery<any[]>({
+    queryKey: ['works'],
+    queryFn: () => api.get('/works').then((r) => r.data),
+  });
+
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/reports/${editing.id}`, data) : api.post('/reports', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reports'] }); closeModal(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reports'] }); closePanel(); },
   });
 
   const del = useMutation({
@@ -33,14 +44,14 @@ export default function Reports() {
   const openAdd = () => {
     setEditing(null);
     setForm({ title: '', type: 'daily', description: '', hoursWorked: '', status: 'submitted', reportDate: new Date().toISOString().split('T')[0] });
-    setModal(true);
+    setPanel(true);
   };
   const openEdit = (r: any) => {
     setEditing(r);
-    setForm({ ...r, reportDate: r.reportDate?.split('T')[0] || '' });
-    setModal(true);
+    setForm({ ...r, reportDate: r.reportDate?.split('T')[0] || '', taskId: r.taskId || '', workId: r.workId || '' });
+    setPanel(true);
   };
-  const closeModal = () => { setModal(false); setEditing(null); };
+  const closePanel = () => { setPanel(false); setEditing(null); };
 
   const submittedCount = reports.filter((r) => r.status === 'submitted').length;
   const approvedCount = reports.filter((r) => r.status === 'approved').length;
@@ -149,6 +160,7 @@ export default function Reports() {
                 <tr>
                   <th className="table-header">Report</th>
                   <th className="table-header">Employee</th>
+                  <th className="table-header">Linked To</th>
                   <th className="table-header">Date</th>
                   <th className="table-header">Type</th>
                   <th className="table-header">Hours</th>
@@ -164,6 +176,17 @@ export default function Reports() {
                       <p className="text-xs text-gray-400 truncate max-w-48">{r.description}</p>
                     </td>
                     <td className="table-cell text-gray-700">{r.user?.name}</td>
+                    <td className="table-cell">
+                      {r.task ? (
+                        <span className="badge bg-indigo-100 text-indigo-700 flex items-center gap-1 w-fit">
+                          <Link2 size={10} /> {r.task.title}
+                        </span>
+                      ) : r.work ? (
+                        <span className="badge bg-purple-100 text-purple-700 flex items-center gap-1 w-fit">
+                          <Link2 size={10} /> {r.work.title}
+                        </span>
+                      ) : <span className="text-gray-400 text-xs">—</span>}
+                    </td>
                     <td className="table-cell text-gray-500 text-sm">{new Date(r.reportDate).toLocaleDateString()}</td>
                     <td className="table-cell">
                       <span className="badge bg-indigo-100 text-indigo-700 capitalize">{r.type}</span>
@@ -197,57 +220,97 @@ export default function Reports() {
           )}
       </div>
 
-      {modal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b">
-              <h2 className="text-lg font-semibold">{editing ? 'Edit Report' : 'Submit Work Report'}</h2>
-            </div>
-            <form onSubmit={(e) => { e.preventDefault(); save.mutate(form); }} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="form-label">Title *</label>
-                  <input className="form-input" value={form.title || ''} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
-                </div>
-                <div>
-                  <label className="form-label">Report Date *</label>
-                  <input type="date" className="form-input" value={form.reportDate || ''} onChange={(e) => setForm({ ...form, reportDate: e.target.value })} required />
-                </div>
-                <div>
-                  <label className="form-label">Type</label>
-                  <select className="form-input" value={form.type || 'daily'} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Hours Worked</label>
-                  <input type="number" min="0" max="24" step="0.5" className="form-input" value={form.hoursWorked || ''} onChange={(e) => setForm({ ...form, hoursWorked: e.target.value })} />
-                </div>
-                {user?.role === 'admin' && (
-                  <div>
-                    <label className="form-label">Status</label>
-                    <select className="form-input" value={form.status || 'submitted'} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                      <option value="submitted">Submitted</option>
-                      <option value="approved">Approved</option>
-                      <option value="rejected">Rejected</option>
-                    </select>
-                  </div>
-                )}
-                <div className="col-span-2">
-                  <label className="form-label">Work Description *</label>
-                  <textarea className="form-input" rows={4} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} required placeholder="Describe the work done..." />
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <button type="submit" disabled={save.isPending} className="btn-primary flex-1">{save.isPending ? 'Saving...' : 'Save'}</button>
-                <button type="button" onClick={closeModal} className="btn-secondary flex-1">Cancel</button>
-              </div>
-            </form>
+      <SlidePanel
+        open={panel}
+        onClose={closePanel}
+        title={editing ? 'Edit Report' : 'Submit Work Report'}
+        subtitle={editing ? `Editing: ${editing.title}` : 'Submit your work report for the day'}
+      >
+        <form onSubmit={(e) => { e.preventDefault(); save.mutate(form); }} className="p-6 space-y-5">
+          <div>
+            <label className="form-label">Title *</label>
+            <input className="form-input" placeholder="Report title..." value={form.title || ''} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
           </div>
-        </div>
-      )}
+
+          {/* Attach Task */}
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4 space-y-3">
+            <p className="text-sm font-semibold text-indigo-700 flex items-center gap-2">
+              <Link2 size={14} /> Attach a Task <span className="font-normal text-indigo-400">(optional)</span>
+            </p>
+            <select
+              className="form-input"
+              value={form.taskId || ''}
+              onChange={(e) => setForm({ ...form, taskId: e.target.value, workId: e.target.value ? '' : form.workId })}
+            >
+              <option value="">— No Task —</option>
+              {tasks.map((t: any) => (
+                <option key={t.id} value={t.id}>[{t.status.replace('_', ' ')}] {t.title}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Attach Work */}
+          <div className="rounded-xl border border-purple-100 bg-purple-50 p-4 space-y-3">
+            <p className="text-sm font-semibold text-purple-700 flex items-center gap-2">
+              <Link2 size={14} /> Attach a Work Entry <span className="font-normal text-purple-400">(optional)</span>
+            </p>
+            <select
+              className="form-input"
+              value={form.workId || ''}
+              onChange={(e) => setForm({ ...form, workId: e.target.value, taskId: e.target.value ? '' : form.taskId })}
+            >
+              <option value="">— No Work Entry —</option>
+              {works.map((w: any) => (
+                <option key={w.id} value={w.id}>
+                  {new Date(w.workDate).toLocaleDateString()} – {w.title}
+                  {w.hoursWorked ? ` (${w.hoursWorked}h)` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">Report Date *</label>
+              <input type="date" className="form-input" value={form.reportDate || ''} onChange={(e) => setForm({ ...form, reportDate: e.target.value })} required />
+            </div>
+            <div>
+              <label className="form-label">Type</label>
+              <select className="form-input" value={form.type || 'daily'} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Hours Worked</label>
+              <input type="number" min="0" max="24" step="0.5" className="form-input" value={form.hoursWorked || ''} onChange={(e) => setForm({ ...form, hoursWorked: e.target.value })} />
+            </div>
+            {user?.role === 'admin' && (
+              <div>
+                <label className="form-label">Status</label>
+                <select className="form-input" value={form.status || 'submitted'} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                  <option value="submitted">Submitted</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="form-label">Work Description *</label>
+            <textarea className="form-input" rows={4} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} required placeholder="Describe the work done..." />
+          </div>
+
+          <div className="flex gap-3 pt-2 border-t border-gray-100">
+            <button type="submit" disabled={save.isPending} className="btn-primary flex-1 py-2.5">
+              {save.isPending ? 'Saving...' : editing ? 'Update Report' : 'Submit Report'}
+            </button>
+            <button type="button" onClick={closePanel} className="btn-secondary flex-1 py-2.5">Cancel</button>
+          </div>
+        </form>
+      </SlidePanel>
     </div>
   );
 }

@@ -23,6 +23,7 @@ model User {
   createdTasks Task[]       @relation("CreatedBy")
   reports      WorkReport[]
   clientWorks  ClientWork[]
+  works        Work[]
 }
 
 model Role {
@@ -91,6 +92,7 @@ model ClientWork {
   notes       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  works       Work[]
 }
 
 model TaskGroup {
@@ -121,6 +123,8 @@ model Task {
   completedAt  DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+  works        Work[]
+  reports      WorkReport[]
 }
 
 model Enquiry {
@@ -191,6 +195,10 @@ model WorkReport {
   id          Int      @id @default(autoincrement())
   userId      Int
   user        User     @relation(fields: [userId], references: [id])
+  taskId      Int?
+  task        Task?    @relation(fields: [taskId], references: [id])
+  workId      Int?
+  work        Work?    @relation(fields: [workId], references: [id])
   reportDate  DateTime
   type        String   @default("daily")
   title       String
@@ -199,4 +207,22 @@ model WorkReport {
   status      String   @default("submitted")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model Work {
+  id           Int         @id @default(autoincrement())
+  userId       Int
+  user         User        @relation(fields: [userId], references: [id])
+  taskId       Int?
+  task         Task?       @relation(fields: [taskId], references: [id])
+  clientWorkId Int?
+  clientWork   ClientWork? @relation(fields: [clientWorkId], references: [id])
+  title        String
+  description  String?
+  workDate     DateTime    @default(now())
+  hoursWorked  Float?
+  status       String      @default("in_progress")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  reports      WorkReport[]
 }

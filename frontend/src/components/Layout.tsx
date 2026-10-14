@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   LayoutDashboard, Briefcase, FileText, CreditCard,
   ClipboardList, MessageSquare, BarChart2, Settings, LogOut,
-  ChevronDown, Menu, X, FolderKanban, Building2
+  ChevronDown, Menu, X, FolderKanban, Building2, Hammer
 } from 'lucide-react';
 
 const menuItems = [
@@ -19,6 +19,7 @@ const menuItems = [
       { path: '/task-groups', label: 'Task Groups' },
     ]
   },
+  { path: '/works', label: 'My Works', icon: Hammer, permission: 'reports:view' },
   { path: '/quotations', label: 'Quotations', icon: FileText, permission: 'quotations:view' },
   { path: '/payments', label: 'Payments', icon: CreditCard, permission: 'payments:view' },
   { path: '/reports', label: 'Work Reports', icon: BarChart2, permission: 'reports:view' },
