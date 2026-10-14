@@ -6,8 +6,8 @@ import { FolderKanban, BarChart3, Users, FileText, Shield } from 'lucide-react';
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@webbeacrm.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -137,26 +137,6 @@ export default function Login() {
                 ) : 'Sign In →'}
               </button>
             </form>
-
-            <div className="mt-6 pt-5 border-t border-gray-100">
-              <p className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Demo Credentials</p>
-              <div className="space-y-1.5">
-                {[
-                  { role: 'Admin', email: 'admin@webbeacrm.com', pass: 'admin123' },
-                  { role: 'Manager', email: 'manager@webbeacrm.com', pass: 'manager123' },
-                ].map(({ role, email: demoEmail, pass }) => (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => { setEmail(demoEmail); setPassword(pass); }}
-                    className="w-full flex items-center justify-between text-xs bg-gray-50 hover:bg-blue-50 border border-gray-100 hover:border-blue-200 rounded-lg px-3 py-2 transition-colors cursor-pointer"
-                  >
-                    <span className="font-semibold text-gray-700">{role}</span>
-                    <span className="text-gray-400">{demoEmail}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       </div>
