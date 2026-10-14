@@ -29,6 +29,9 @@ import fileRoutes from './routes/files';
 
 const app = express();
 
+// Trust reverse proxy (Nginx) for correct client IP & SSL detection
+app.set('trust proxy', 1);
+
 // Security headers
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -50,17 +53,19 @@ app.use(cors({
 // Rate limiting — login endpoint stricter
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 100,
   message: { message: 'Too many attempts, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 300,
+  max: 500,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 
 app.use(express.json({ limit: '10mb' }));
