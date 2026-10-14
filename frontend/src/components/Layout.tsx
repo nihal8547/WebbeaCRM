@@ -11,32 +11,62 @@ import NotificationBell from './NotificationBell';
 import GlobalSearch from './GlobalSearch';
 import InactivityGuard from './InactivityGuard';
 
-const menuItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard:view' },
-  { path: '/clients', label: 'Clients', icon: Building2, permission: 'clients:view' },
-  { path: '/client-works', label: 'Client Works', icon: Briefcase, permission: 'client-works:view' },
-  { path: '/enquiries', label: 'Enquiries', icon: MessageSquare, permission: 'enquiries:view' },
+const menuSections = [
   {
-    label: 'Tasks', icon: ClipboardList, permission: 'tasks:view',
-    children: [
-      { path: '/tasks', label: 'All Tasks' },
-      { path: '/task-groups', label: 'Task Groups' },
-    ]
+    label: 'Main',
+    items: [
+      { path: '/', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard:view' },
+    ],
   },
-  { path: '/works', label: 'My Works', icon: Hammer, permission: 'reports:view' },
-  { path: '/reports', label: 'Work Reports', icon: BarChart2, permission: 'reports:view' },
-  { path: '/quotations', label: 'Quotations', icon: FileText, permission: 'quotations:view' },
-  { path: '/payments', label: 'Payments', icon: CreditCard, permission: 'payments:view' },
-  { path: '/products', label: 'Products', icon: Package, permission: 'clients:view' },
-  { path: '/calendar', label: 'Calendar', icon: Calendar, permission: 'dashboard:view' },
-  { path: '/attendance', label: 'Attendance', icon: Clock, permission: 'dashboard:view' },
   {
-    label: 'Admin', icon: Settings, permission: 'users:view',
-    children: [
-      { path: '/users', label: 'Users' },
-      { path: '/roles', label: 'Roles & Permissions' },
-      { path: '/activity-log', label: 'Activity Log' },
-    ]
+    label: 'CRM',
+    items: [
+      { path: '/clients', label: 'Clients', icon: Building2, permission: 'clients:view' },
+      { path: '/client-works', label: 'Client Works', icon: Briefcase, permission: 'client-works:view' },
+      { path: '/enquiries', label: 'Enquiries', icon: MessageSquare, permission: 'enquiries:view' },
+    ],
+  },
+  {
+    label: 'Work',
+    items: [
+      {
+        label: 'Tasks', icon: ClipboardList, permission: 'tasks:view',
+        children: [
+          { path: '/tasks', label: 'All Tasks' },
+          { path: '/task-groups', label: 'Groups' },
+        ],
+      },
+      { path: '/works', label: 'My Works', icon: Hammer, permission: 'reports:view' },
+      { path: '/reports', label: 'Work Reports', icon: BarChart2, permission: 'reports:view' },
+    ],
+  },
+  {
+    label: 'Finance',
+    items: [
+      { path: '/quotations', label: 'Quotations', icon: FileText, permission: 'quotations:view' },
+      { path: '/payments', label: 'Payments', icon: CreditCard, permission: 'payments:view' },
+      { path: '/products', label: 'Products', icon: Package, permission: 'clients:view' },
+    ],
+  },
+  {
+    label: 'Tools',
+    items: [
+      { path: '/calendar', label: 'Calendar', icon: Calendar, permission: 'dashboard:view' },
+      { path: '/attendance', label: 'Attendance', icon: Clock, permission: 'dashboard:view' },
+    ],
+  },
+  {
+    label: 'Admin',
+    items: [
+      {
+        label: 'Admin', icon: Settings, permission: 'users:view',
+        children: [
+          { path: '/users', label: 'Users' },
+          { path: '/roles', label: 'Roles & Permissions' },
+          { path: '/activity-log', label: 'Activity Log' },
+        ],
+      },
+    ],
   },
 ];
 
@@ -91,68 +121,85 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {menuItems.map((item) => {
-            if (!can(item.permission)) return null;
-
-            if (item.children) {
-              const expanded = expandedMenus.includes(item.label);
-              return (
-                <div key={item.label}>
-                  <button
-                    onClick={() => toggleMenu(item.label)}
-                    className="sidebar-link w-full justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <item.icon size={18} />
-                      <span className="whitespace-nowrap">{item.label}</span>
-                    </div>
-                    <ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
-                  </button>
-                  {expanded && (
-                    <div className="ml-4 mt-1 space-y-1 pl-4 border-l border-white/10">
-                      {item.children.map((child) => (
-                        <Link
-                          key={child.path}
-                          to={child.path}
-                          className={`sidebar-link text-xs ${isActive(child.path) ? 'active' : ''}`}
-                        >
-                          {child.label}
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            }
+        <nav className="sidebar-nav flex-1 overflow-y-auto py-2 px-2">
+          {menuSections.map((section) => {
+            const visibleItems = section.items.filter((item) => can(item.permission));
+            if (visibleItems.length === 0) return null;
 
             return (
-              <Link
-                key={item.path}
-                to={item.path!}
-                className={`sidebar-link ${isActive(item.path!) ? 'active' : ''}`}
-              >
-                <item.icon size={18} />
-                <span className="whitespace-nowrap">{item.label}</span>
-              </Link>
+              <div key={section.label}>
+                <p className="sidebar-section-label">{section.label}</p>
+                <div className="space-y-0.5 mb-1">
+                  {visibleItems.map((item) => {
+                    if (item.children) {
+                      const expanded = expandedMenus.includes(item.label);
+                      return (
+                        <div key={item.label}>
+                          <button
+                            onClick={() => toggleMenu(item.label)}
+                            className="sidebar-link w-full justify-between"
+                          >
+                            <div className="flex items-center gap-3">
+                              <item.icon size={16} className="flex-shrink-0 opacity-75" />
+                              <span className="whitespace-nowrap">{item.label}</span>
+                            </div>
+                            <ChevronDown size={12} className={`opacity-50 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+                          </button>
+                          {expanded && (
+                            <div className="ml-2 mt-0.5 mb-1 space-y-0.5 pl-5 border-l border-white/10">
+                              {item.children.map((child) => (
+                                <Link
+                                  key={child.path}
+                                  to={child.path}
+                                  className={`sidebar-link py-1.5 text-xs ${isActive(child.path) ? 'active' : ''}`}
+                                >
+                                  {child.label}
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path!}
+                        className={`sidebar-link ${isActive(item.path!) ? 'active' : ''}`}
+                      >
+                        <item.icon size={16} className="flex-shrink-0 opacity-75" />
+                        <span className="whitespace-nowrap">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </nav>
 
-        {/* User */}
-        <div className="p-3 border-t border-white/10">
-          <div className="flex items-center gap-3 px-2 py-2">
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+        {/* User footer */}
+        <div className="px-2 py-3 border-t border-white/10 flex-shrink-0">
+          <Link
+            to="/profile"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/8 transition-colors group"
+          >
+            <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
               {user?.name[0].toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-white text-sm font-medium truncate">{user?.name}</p>
-              <p className="text-slate-400 text-xs capitalize">{user?.role}</p>
+              <p className="text-white text-xs font-medium truncate leading-tight">{user?.name}</p>
+              <p className="text-slate-500 text-[10px] capitalize mt-0.5">{user?.role}</p>
             </div>
-            <button onClick={handleLogout} className="text-slate-400 hover:text-white">
-              <LogOut size={16} />
-            </button>
-          </div>
+          </Link>
+          <button
+            onClick={handleLogout}
+            className="mt-1 w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-white/5 transition-colors text-xs"
+          >
+            <LogOut size={14} />
+            <span>Sign out</span>
+          </button>
         </div>
       </aside>
 

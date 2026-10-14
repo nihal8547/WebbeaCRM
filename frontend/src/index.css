@@ -13,20 +13,49 @@ body {
   background: #f1f5f9;
 }
 
+/* Sidebar scrollbar — thin, dark-themed */
+.sidebar-nav::-webkit-scrollbar {
+  width: 3px;
+}
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+}
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+.sidebar-nav {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.12) transparent;
+}
+
 @layer components {
   .sidebar-link {
-    @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-all duration-200;
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150;
     color: var(--sidebar-text);
   }
 
   .sidebar-link:hover {
-    background: rgba(255,255,255,0.1);
-    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    color: #e2e8f0;
   }
 
   .sidebar-link.active {
-    background: var(--sidebar-active);
-    color: #fff;
+    background: rgba(59, 130, 246, 0.18);
+    color: #93c5fd;
+    font-weight: 500;
+  }
+
+  .sidebar-link.active .sidebar-icon {
+    color: #60a5fa;
+  }
+
+  .sidebar-section-label {
+    @apply px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest;
+    color: rgba(148, 163, 184, 0.5);
   }
 
   .card {
