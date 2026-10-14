@@ -107,49 +107,24 @@ async function main() {
     skipDuplicates: true,
   });
 
-  // Admin user
-  const adminPass = await bcrypt.hash('admin123', 10);
-  await prisma.user.upsert({
-    where: { email: 'admin@webbeacrm.com' },
-    update: {},
-    create: {
-      name: 'Admin User',
-      email: 'admin@webbeacrm.com',
-      password: adminPass,
-      phone: '9876543210',
-      roleId: adminRole.id,
-    },
+  // Ensure an admin user exists if none present
+  const adminExists = await prisma.user.findFirst({
+    where: { roleId: adminRole.id },
   });
-
-  // Sample manager
-  const managerPass = await bcrypt.hash('manager123', 10);
-  await prisma.user.upsert({
-    where: { email: 'manager@webbeacrm.com' },
-    update: {},
-    create: {
-      name: 'Rahul Manager',
-      email: 'manager@webbeacrm.com',
-      password: managerPass,
-      phone: '9876543211',
-      roleId: managerRole.id,
-    },
-  });
-
-  // Sample clients
-  const clients = [
-    { name: 'Arun Kumar', email: 'arun@example.com', phone: '9876543220', company: 'AK Enterprises', address: 'Kochi, Kerala' },
-    { name: 'Priya Nair', email: 'priya@example.com', phone: '9876543221', company: 'PN Solutions', address: 'Trivandrum, Kerala' },
-    { name: 'Suresh Menon', email: 'suresh@example.com', phone: '9876543222', company: 'SM Trading', address: 'Thrissur, Kerala' },
-  ];
-
-  for (const c of clients) {
-    const existing = await prisma.client.findFirst({ where: { phone: c.phone } });
-    if (!existing) await prisma.client.create({ data: c });
+  if (!adminExists) {
+    const adminPass = await bcrypt.hash('admin123', 10);
+    await prisma.user.create({
+      data: {
+        name: 'Admin User',
+        email: 'admin@webbeacrm.com',
+        password: adminPass,
+        phone: '9876543210',
+        roleId: adminRole.id,
+      },
+    });
   }
 
-  console.log('✅ Seed completed!');
-  console.log('Login: admin@webbeacrm.com / admin123');
-  console.log('Login: manager@webbeacrm.com / manager123');
+  console.log('✅ System permissions & roles synchronized successfully (no dummy data created)');
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect());
