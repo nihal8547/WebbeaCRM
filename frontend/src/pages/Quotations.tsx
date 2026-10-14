@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../lib/api';
-import { Plus, Edit, Trash2, Search, PlusCircle, MinusCircle, FileText, Send, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, PlusCircle, MinusCircle, FileText, Send, CheckCircle } from 'lucide-react';
 import SlidePanel from '../components/SlidePanel';
 
 const statusColors: Record<string, string> = {
@@ -35,12 +36,14 @@ export default function Quotations() {
 
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/quotations/${editing.id}`, data) : api.post('/quotations', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['quotations'] }); closePanel(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['quotations'] }); toast.success(editing ? 'Quotation updated' : 'Quotation created'); closePanel(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save'),
   });
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/quotations/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['quotations'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['quotations'] }); toast.success('Quotation deleted'); },
+    onError: () => toast.error('Failed to delete'),
   });
 
   const openAdd = () => {

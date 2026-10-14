@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Briefcase, FileText, CreditCard,
   ClipboardList, MessageSquare, BarChart2, Settings, LogOut,
   ChevronDown, Menu, X, FolderKanban, Building2, Hammer,
-  Package, Calendar, Clock, Activity, Search, User
+  Package, Calendar, Clock, Search, User
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import GlobalSearch from './GlobalSearch';

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { Plus, Edit, Trash2, Search, Shield } from 'lucide-react';
 
@@ -22,12 +23,14 @@ export default function Users() {
 
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/users/${editing.id}`, data) : api.post('/users', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); closeModal(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success(editing ? 'User updated' : 'User created'); closeModal(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save user'),
   });
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/users/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success('User deleted'); },
+    onError: () => toast.error('Failed to delete user'),
   });
 
   const openAdd = () => { setEditing(null); setForm({ name: '', email: '', password: '', phone: '', isActive: true }); setModal(true); };

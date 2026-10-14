@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { Plus, Edit, Trash2, Search, Phone, Calendar, Inbox, MessageSquare, TrendingUp, XCircle, LayoutList, Columns } from 'lucide-react';
 import SlidePanel from '../components/SlidePanel';
@@ -42,17 +43,19 @@ export default function Enquiries() {
 
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/enquiries/${editing.id}`, data) : api.post('/enquiries', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['enquiries'] }); closePanel(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['enquiries'] }); toast.success(editing ? 'Enquiry updated' : 'Enquiry created'); closePanel(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save'),
   });
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/enquiries/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['enquiries'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['enquiries'] }); toast.success('Enquiry deleted'); },
+    onError: () => toast.error('Failed to delete'),
   });
 
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) => api.put(`/enquiries/${id}`, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['enquiries'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['enquiries'] }); toast.success('Status updated'); },
   });
 
   const openAdd = () => { setEditing(null); setForm({ name: '', phone: '', subject: '', status: 'new', priority: 'medium' }); setPanel(true); };

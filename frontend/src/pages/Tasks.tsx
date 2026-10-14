@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { Plus, Edit, Trash2, Search, Calendar, ListTodo, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 import SlidePanel from '../components/SlidePanel';
@@ -50,17 +51,19 @@ export default function Tasks() {
 
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/tasks/${editing.id}`, data) : api.post('/tasks', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); closeModal(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); toast.success(editing ? 'Task updated' : 'Task created'); closePanel(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save task'),
   });
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/tasks/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); toast.success('Task deleted'); },
+    onError: () => toast.error('Failed to delete task'),
   });
 
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) => api.put(`/tasks/${id}`, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); toast.success('Status updated'); },
   });
 
   const openAdd = () => { setEditing(null); setForm({ title: '', type: 'daily', status: 'pending', priority: 'medium' }); setPanel(true); };

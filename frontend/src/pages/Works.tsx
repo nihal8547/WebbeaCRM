@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { Plus, Edit, Trash2, Search, Clock, CheckCircle, Loader, Calendar, Link2 } from 'lucide-react';
 import SlidePanel from '../components/SlidePanel';
@@ -56,12 +57,14 @@ export default function Works() {
 
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/works/${editing.id}`, data) : api.post('/works', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['works'] }); closePanel(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['works'] }); toast.success(editing ? 'Work updated' : 'Work logged'); closePanel(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save'),
   });
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/works/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['works'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['works'] }); toast.success('Work deleted'); },
+    onError: () => toast.error('Failed to delete'),
   });
 
   const openAdd = () => {

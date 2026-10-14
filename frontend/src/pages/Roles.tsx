@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { Plus, Edit, Shield, Check } from 'lucide-react';
 
@@ -21,7 +22,8 @@ export default function Roles() {
 
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/roles/${editing.id}`, data) : api.post('/roles', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['roles'] }); setModal(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['roles'] }); toast.success(editing ? 'Role updated' : 'Role created'); setModal(false); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save role'),
   });
 
   const openAdd = () => { setEditing(null); setForm({ name: '', description: '', permissionIds: [] }); setModal(true); };

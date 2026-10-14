@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { User, Lock, Save, Eye, EyeOff, CheckCircle } from 'lucide-react';
@@ -22,9 +23,11 @@ export default function Profile() {
     onSuccess: (res) => {
       if (setUser) setUser({ ...user!, ...res.data });
       qc.invalidateQueries({ queryKey: ['users'] });
+      toast.success('Profile saved');
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save profile'),
   });
 
   const changePassword = useMutation({
@@ -32,6 +35,7 @@ export default function Profile() {
     onSuccess: () => {
       setPwForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
       setPwError('');
+      toast.success('Password changed');
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     },

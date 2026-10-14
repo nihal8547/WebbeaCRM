@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { Plus, Edit, Trash2, Search, Building2, Phone, Mail, Users, UserCheck, UserX, Download } from 'lucide-react';
 
@@ -28,12 +29,18 @@ export default function Clients() {
   const save = useMutation({
     mutationFn: (data: Partial<Client>) =>
       editing ? api.put(`/clients/${editing.id}`, data) : api.post('/clients', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['clients'] }); closeModal(); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clients'] });
+      toast.success(editing ? 'Client updated' : 'Client added');
+      closeModal();
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save client'),
   });
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/clients/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['clients'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['clients'] }); toast.success('Client deleted'); },
+    onError: () => toast.error('Failed to delete client'),
   });
 
   const openAdd = () => { setEditing(null); setForm(defaultForm); setModal(true); };

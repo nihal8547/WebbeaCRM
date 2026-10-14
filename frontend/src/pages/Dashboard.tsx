@@ -3,7 +3,7 @@ import api from '../lib/api';
 import { Users, ClipboardList, TrendingUp, MessageSquare, Briefcase, AlertTriangle } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 
 const statusColor: Record<string, string> = {
@@ -104,7 +104,7 @@ export default function Dashboard() {
           {tasksChart && tasksChart.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
-                <Pie data={tasksChart} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={70} label={({ status, percent }) => `${status} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                <Pie data={tasksChart} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
                   {tasksChart.map((_: any, i: number) => (
                     <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                   ))}

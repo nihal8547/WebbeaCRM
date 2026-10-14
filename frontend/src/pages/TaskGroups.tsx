@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { Plus, Edit, Trash2, FolderKanban, ChevronDown, ChevronRight } from 'lucide-react';
 
@@ -17,12 +18,14 @@ export default function TaskGroups() {
 
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/task-groups/${editing.id}`, data) : api.post('/task-groups', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-groups'] }); setModal(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-groups'] }); toast.success(editing ? 'Group updated' : 'Group created'); setModal(false); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save'),
   });
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/task-groups/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['task-groups'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-groups'] }); toast.success('Group deleted'); },
+    onError: () => toast.error('Failed to delete'),
   });
 
   const toggleExpand = (id: number) => setExpanded((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);

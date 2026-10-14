@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import MobileBlocker from './components/MobileBlocker';
 import Login from './pages/Login';
@@ -64,14 +66,25 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={qc}>
-      <BrowserRouter>
-        <MobileBlocker>
-          <AuthProvider>
-            <AppRoutes />
-          </AuthProvider>
-        </MobileBlocker>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={qc}>
+        <BrowserRouter>
+          <MobileBlocker>
+            <AuthProvider>
+              <AppRoutes />
+              <Toaster
+                position="top-right"
+                toastOptions={{
+                  duration: 3000,
+                  style: { fontSize: '14px', maxWidth: '380px' },
+                  success: { iconTheme: { primary: '#16a34a', secondary: '#fff' } },
+                  error: { iconTheme: { primary: '#dc2626', secondary: '#fff' } },
+                }}
+              />
+            </AuthProvider>
+          </MobileBlocker>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

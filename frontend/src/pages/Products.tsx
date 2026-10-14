@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { Plus, Edit, Trash2, Search, Package, Tag, ToggleLeft, ToggleRight } from 'lucide-react';
 import SlidePanel from '../components/SlidePanel';
@@ -29,12 +30,14 @@ export default function Products() {
 
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/products/${editing.id}`, data) : api.post('/products', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); closePanel(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); toast.success(editing ? 'Product updated' : 'Product added'); closePanel(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save'),
   });
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/products/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); toast.success('Product deleted'); },
+    onError: () => toast.error('Failed to delete'),
   });
 
   const toggleActive = useMutation({

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { Plus, Edit, Trash2, Search, Calendar, Clock, User, Briefcase, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 import SlidePanel from '../components/SlidePanel';
@@ -58,12 +59,14 @@ export default function ClientWorks() {
   const save = useMutation({
     mutationFn: (data: any) =>
       editing ? api.put(`/client-works/${editing.id}`, data) : api.post('/client-works', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['client-works'] }); closePanel(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['client-works'] }); toast.success(editing ? 'Work updated' : 'Work added'); closePanel(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save'),
   });
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/client-works/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['client-works'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['client-works'] }); toast.success('Work deleted'); },
+    onError: () => toast.error('Failed to delete'),
   });
 
   const openAdd = () => { setEditing(null); setForm(defaultForm); setPanel(true); };

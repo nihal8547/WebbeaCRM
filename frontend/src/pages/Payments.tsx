@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { Plus, Edit, Trash2, Search, TrendingUp, Clock, CreditCard, AlertTriangle } from 'lucide-react';
 
@@ -36,12 +37,14 @@ export default function Payments() {
 
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/payments/${editing.id}`, data) : api.post('/payments', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['payments'] }); closeModal(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['payments'] }); toast.success(editing ? 'Payment updated' : 'Payment recorded'); closeModal(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save'),
   });
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/payments/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['payments'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['payments'] }); toast.success('Payment deleted'); },
+    onError: () => toast.error('Failed to delete'),
   });
 
   const openAdd = () => { setEditing(null); setForm({ amount: '', method: 'cash', status: 'pending' }); setModal(true); };
