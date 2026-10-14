@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
-import { Plus, Edit, Trash2, Search, Building2, Phone, Mail } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Building2, Phone, Mail, Users, UserCheck, UserX } from 'lucide-react';
 
 interface Client {
   id: number; name: string; email?: string; phone: string;
   company?: string; address?: string; gst?: string; status: string; notes?: string;
+  createdAt?: string;
 }
 
 const defaultForm: Partial<Client> = { name: '', email: '', phone: '', company: '', address: '', gst: '', status: 'active', notes: '' };
@@ -13,6 +14,8 @@ const defaultForm: Partial<Client> = { name: '', email: '', phone: '', company: 
 export default function Clients() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [sortBy, setSortBy] = useState('createdAt_desc');
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [form, setForm] = useState<Partial<Client>>(defaultForm);
@@ -37,11 +40,26 @@ export default function Clients() {
   const openEdit = (c: Client) => { setEditing(c); setForm(c); setModal(true); };
   const closeModal = () => { setModal(false); setEditing(null); setForm(defaultForm); };
 
-  const filtered = clients.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone.includes(search) ||
-    (c.company || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const activeCount = clients.filter((c) => c.status === 'active').length;
+  const inactiveCount = clients.filter((c) => c.status === 'inactive').length;
+
+  const filtered = clients
+    .filter((c) => {
+      const matchSearch =
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        c.phone.includes(search) ||
+        (c.company || '').toLowerCase().includes(search.toLowerCase());
+      const matchStatus = !filterStatus || c.status === filterStatus;
+      return matchSearch && matchStatus;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'name_asc': return a.name.localeCompare(b.name);
+        case 'name_desc': return b.name.localeCompare(a.name);
+        case 'createdAt_asc': return (a.createdAt || '').localeCompare(b.createdAt || '');
+        default: return (b.createdAt || '').localeCompare(a.createdAt || '');
+      }
+    });
 
   return (
     <div className="space-y-6">
@@ -55,8 +73,39 @@ export default function Clients() {
         </button>
       </div>
 
-      <div className="card p-4">
-        <div className="relative">
+      {/* Status Cards */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="card flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+            <Users size={22} className="text-blue-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{clients.length}</p>
+            <p className="text-sm text-gray-500">Total Clients</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-green-200" onClick={() => setFilterStatus(filterStatus === 'active' ? '' : 'active')}>
+          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+            <UserCheck size={22} className="text-green-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{activeCount}</p>
+            <p className="text-sm text-gray-500">Active</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-gray-300" onClick={() => setFilterStatus(filterStatus === 'inactive' ? '' : 'inactive')}>
+          <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
+            <UserX size={22} className="text-gray-500" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{inactiveCount}</p>
+            <p className="text-sm text-gray-500">Inactive</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card p-4 flex gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-48">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             className="form-input pl-9"
@@ -65,6 +114,17 @@ export default function Clients() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+        <select className="form-input w-36" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+          <option value="">All Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <select className="form-input w-44" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="createdAt_desc">Newest First</option>
+          <option value="createdAt_asc">Oldest First</option>
+          <option value="name_asc">Name A–Z</option>
+          <option value="name_desc">Name Z–A</option>
+        </select>
       </div>
 
       <div className="card p-0 overflow-hidden">

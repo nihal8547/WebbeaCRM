@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
-import { Plus, Edit, Trash2, Search, TrendingUp, Clock } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, TrendingUp, Clock, CreditCard, AlertTriangle } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   paid: 'bg-green-100 text-green-700',
@@ -13,6 +13,8 @@ const statusColors: Record<string, string> = {
 export default function Payments() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [sortBy, setSortBy] = useState('createdAt_desc');
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState<any>({ amount: '', method: 'cash', status: 'pending' });
@@ -52,12 +54,28 @@ export default function Payments() {
 
   const totalPaid = payments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
   const totalPending = payments.filter((p) => p.status === 'pending').reduce((s, p) => s + p.amount, 0);
+  const totalOverdue = payments.filter((p) => p.status === 'overdue').reduce((s, p) => s + p.amount, 0);
 
-  const filtered = payments.filter((p) =>
-    p.paymentNo.includes(search) ||
-    (p.client?.name || '').toLowerCase().includes(search.toLowerCase()) ||
-    (p.description || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = payments
+    .filter((p) => {
+      const matchSearch =
+        p.paymentNo.includes(search) ||
+        (p.client?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (p.description || '').toLowerCase().includes(search.toLowerCase());
+      const matchStatus = !filterStatus || p.status === filterStatus;
+      return matchSearch && matchStatus;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'amount_desc': return b.amount - a.amount;
+        case 'amount_asc': return a.amount - b.amount;
+        case 'paidDate_desc': return (b.paidDate || '').localeCompare(a.paidDate || '');
+        case 'paidDate_asc': return (a.paidDate || '9999').localeCompare(b.paidDate || '9999');
+        case 'client_asc': return (a.client?.name || '').localeCompare(b.client?.name || '');
+        case 'createdAt_asc': return (a.createdAt || '').localeCompare(b.createdAt || '');
+        default: return (b.createdAt || '').localeCompare(a.createdAt || '');
+      }
+    });
 
   return (
     <div className="space-y-6">
@@ -71,33 +89,66 @@ export default function Payments() {
         </button>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="card flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+            <CreditCard size={22} className="text-blue-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{payments.length}</p>
+            <p className="text-sm text-gray-500">Total Records</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-green-200" onClick={() => setFilterStatus(filterStatus === 'paid' ? '' : 'paid')}>
           <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
             <TrendingUp size={22} className="text-green-600" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-gray-900">₹{totalPaid.toLocaleString()}</p>
-            <p className="text-sm text-gray-500">Total Collected</p>
+            <p className="text-xl font-bold text-gray-900">₹{totalPaid.toLocaleString()}</p>
+            <p className="text-sm text-gray-500">Collected</p>
           </div>
         </div>
-        <div className="card flex items-center gap-4">
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-yellow-200" onClick={() => setFilterStatus(filterStatus === 'pending' ? '' : 'pending')}>
           <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
             <Clock size={22} className="text-yellow-600" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-gray-900">₹{totalPending.toLocaleString()}</p>
-            <p className="text-sm text-gray-500">Pending Amount</p>
+            <p className="text-xl font-bold text-gray-900">₹{totalPending.toLocaleString()}</p>
+            <p className="text-sm text-gray-500">Pending</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-red-200" onClick={() => setFilterStatus(filterStatus === 'overdue' ? '' : 'overdue')}>
+          <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+            <AlertTriangle size={22} className="text-red-500" />
+          </div>
+          <div>
+            <p className="text-xl font-bold text-gray-900">₹{totalOverdue.toLocaleString()}</p>
+            <p className="text-sm text-gray-500">Overdue</p>
           </div>
         </div>
       </div>
 
-      <div className="card p-4">
-        <div className="relative">
+      <div className="card p-4 flex gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-48">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input className="form-input pl-9" placeholder="Search payments..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
+        <select className="form-input w-36" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+          <option value="">All Status</option>
+          <option value="paid">Paid</option>
+          <option value="pending">Pending</option>
+          <option value="partial">Partial</option>
+          <option value="overdue">Overdue</option>
+        </select>
+        <select className="form-input w-48" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="createdAt_desc">Newest First</option>
+          <option value="createdAt_asc">Oldest First</option>
+          <option value="amount_desc">Amount (Highest)</option>
+          <option value="amount_asc">Amount (Lowest)</option>
+          <option value="paidDate_desc">Paid Date (Recent)</option>
+          <option value="client_asc">Client A–Z</option>
+        </select>
       </div>
 
       <div className="card p-0 overflow-hidden">

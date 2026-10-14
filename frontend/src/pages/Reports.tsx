@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
-import { Plus, Edit, Trash2, Search, Clock } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Clock, FileText, CheckCircle, Send } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Reports() {
@@ -9,6 +9,8 @@ export default function Reports() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [sortBy, setSortBy] = useState('reportDate_desc');
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState<any>({ title: '', type: 'daily', description: '', hoursWorked: '', status: 'submitted', reportDate: new Date().toISOString().split('T')[0] });
@@ -40,11 +42,26 @@ export default function Reports() {
   };
   const closeModal = () => { setModal(false); setEditing(null); };
 
-  const filtered = reports.filter((r) => {
-    const matchSearch = r.title.toLowerCase().includes(search.toLowerCase()) || (r.user?.name || '').toLowerCase().includes(search.toLowerCase());
-    const matchType = !filterType || r.type === filterType;
-    return matchSearch && matchType;
-  });
+  const submittedCount = reports.filter((r) => r.status === 'submitted').length;
+  const approvedCount = reports.filter((r) => r.status === 'approved').length;
+  const totalHours = reports.reduce((s, r) => s + (r.hoursWorked || 0), 0);
+
+  const filtered = reports
+    .filter((r) => {
+      const matchSearch = r.title.toLowerCase().includes(search.toLowerCase()) || (r.user?.name || '').toLowerCase().includes(search.toLowerCase());
+      const matchType = !filterType || r.type === filterType;
+      const matchStatus = !filterStatus || r.status === filterStatus;
+      return matchSearch && matchType && matchStatus;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'reportDate_asc': return (a.reportDate || '').localeCompare(b.reportDate || '');
+        case 'createdAt_desc': return (b.createdAt || '').localeCompare(a.createdAt || '');
+        case 'hours_desc': return (b.hoursWorked || 0) - (a.hoursWorked || 0);
+        case 'employee_asc': return (a.user?.name || '').localeCompare(b.user?.name || '');
+        default: return (b.reportDate || '').localeCompare(a.reportDate || '');
+      }
+    });
 
   return (
     <div className="space-y-6">
@@ -58,6 +75,46 @@ export default function Reports() {
         </button>
       </div>
 
+      {/* Status Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="card flex items-center gap-4">
+          <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+            <FileText size={22} className="text-indigo-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{reports.length}</p>
+            <p className="text-sm text-gray-500">Total Reports</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-blue-200" onClick={() => setFilterStatus(filterStatus === 'submitted' ? '' : 'submitted')}>
+          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+            <Send size={22} className="text-blue-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{submittedCount}</p>
+            <p className="text-sm text-gray-500">Submitted</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-green-200" onClick={() => setFilterStatus(filterStatus === 'approved' ? '' : 'approved')}>
+          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+            <CheckCircle size={22} className="text-green-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{approvedCount}</p>
+            <p className="text-sm text-gray-500">Approved</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4">
+          <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+            <Clock size={22} className="text-orange-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{totalHours.toFixed(1)}h</p>
+            <p className="text-sm text-gray-500">Total Hours</p>
+          </div>
+        </div>
+      </div>
+
       <div className="card p-4 flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-48">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -68,6 +125,19 @@ export default function Reports() {
           <option value="daily">Daily</option>
           <option value="weekly">Weekly</option>
           <option value="monthly">Monthly</option>
+        </select>
+        <select className="form-input w-40" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+          <option value="">All Status</option>
+          <option value="submitted">Submitted</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+        <select className="form-input w-48" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="reportDate_desc">Report Date (Recent)</option>
+          <option value="reportDate_asc">Report Date (Oldest)</option>
+          <option value="hours_desc">Hours (Highest)</option>
+          <option value="employee_asc">Employee A–Z</option>
+          <option value="createdAt_desc">Submitted (Recent)</option>
         </select>
       </div>
 
@@ -167,7 +237,7 @@ export default function Reports() {
                 )}
                 <div className="col-span-2">
                   <label className="form-label">Work Description *</label>
-                  <textarea className="form-input" rows={4} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} required placeholder="Describe the work done today..." />
+                  <textarea className="form-input" rows={4} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} required placeholder="Describe the work done..." />
                 </div>
               </div>
               <div className="flex gap-3">

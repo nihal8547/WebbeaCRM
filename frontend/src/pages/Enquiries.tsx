@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
-import { Plus, Edit, Trash2, Search, Phone, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Phone, Calendar, Inbox, MessageSquare, TrendingUp, XCircle } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   new: 'bg-purple-100 text-purple-800',
@@ -15,6 +15,7 @@ export default function Enquiries() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [sortBy, setSortBy] = useState('createdAt_desc');
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState<any>({ name: '', phone: '', subject: '', status: 'new', priority: 'medium' });
@@ -52,11 +53,25 @@ export default function Enquiries() {
   };
   const closeModal = () => { setModal(false); setEditing(null); };
 
-  const filtered = enquiries.filter((e) => {
-    const matchSearch = e.name.toLowerCase().includes(search.toLowerCase()) || e.phone.includes(search) || e.subject.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = !filterStatus || e.status === filterStatus;
-    return matchSearch && matchStatus;
-  });
+  const newCount = enquiries.filter((e) => e.status === 'new').length;
+  const contactedCount = enquiries.filter((e) => e.status === 'contacted').length;
+  const convertedCount = enquiries.filter((e) => e.status === 'converted').length;
+  const lostCount = enquiries.filter((e) => e.status === 'lost').length;
+
+  const filtered = enquiries
+    .filter((e) => {
+      const matchSearch = e.name.toLowerCase().includes(search.toLowerCase()) || e.phone.includes(search) || e.subject.toLowerCase().includes(search.toLowerCase());
+      const matchStatus = !filterStatus || e.status === filterStatus;
+      return matchSearch && matchStatus;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'name_asc': return a.name.localeCompare(b.name);
+        case 'followUp_asc': return (a.followUpDate || '9999').localeCompare(b.followUpDate || '9999');
+        case 'createdAt_asc': return (a.createdAt || '').localeCompare(b.createdAt || '');
+        default: return (b.createdAt || '').localeCompare(a.createdAt || '');
+      }
+    });
 
   return (
     <div className="space-y-6">
@@ -68,6 +83,46 @@ export default function Enquiries() {
         <button onClick={openAdd} className="btn-primary flex items-center gap-2">
           <Plus size={16} /> Add Enquiry
         </button>
+      </div>
+
+      {/* Status Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-purple-200" onClick={() => setFilterStatus(filterStatus === 'new' ? '' : 'new')}>
+          <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+            <Inbox size={22} className="text-purple-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{newCount}</p>
+            <p className="text-sm text-gray-500">New</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-blue-200" onClick={() => setFilterStatus(filterStatus === 'contacted' ? '' : 'contacted')}>
+          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+            <MessageSquare size={22} className="text-blue-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{contactedCount}</p>
+            <p className="text-sm text-gray-500">Contacted</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-green-200" onClick={() => setFilterStatus(filterStatus === 'converted' ? '' : 'converted')}>
+          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+            <TrendingUp size={22} className="text-green-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{convertedCount}</p>
+            <p className="text-sm text-gray-500">Converted</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-red-200" onClick={() => setFilterStatus(filterStatus === 'lost' ? '' : 'lost')}>
+          <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+            <XCircle size={22} className="text-red-500" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{lostCount}</p>
+            <p className="text-sm text-gray-500">Lost</p>
+          </div>
+        </div>
       </div>
 
       <div className="card p-4 flex gap-3 flex-wrap">
@@ -82,6 +137,12 @@ export default function Enquiries() {
           <option value="qualified">Qualified</option>
           <option value="converted">Converted</option>
           <option value="lost">Lost</option>
+        </select>
+        <select className="form-input w-48" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="createdAt_desc">Newest First</option>
+          <option value="createdAt_asc">Oldest First</option>
+          <option value="followUp_asc">Follow-Up Date</option>
+          <option value="name_asc">Name A–Z</option>
         </select>
       </div>
 
@@ -112,7 +173,7 @@ export default function Enquiries() {
                       </div>
                       {e.email && <p className="text-xs text-gray-400">{e.email}</p>}
                     </td>
-                    <td className="table-cell text-gray-500 text-sm">{e.source || '-'}</td>
+                    <td className="table-cell text-gray-500 text-sm capitalize">{e.source?.replace('_', ' ') || '-'}</td>
                     <td className="table-cell">
                       {e.followUpDate ? (
                         <div className="flex items-center gap-1 text-xs text-orange-600">

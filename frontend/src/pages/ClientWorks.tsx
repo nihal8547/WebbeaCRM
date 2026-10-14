@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
-import { Plus, Edit, Trash2, Search, Calendar, Clock, User } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Calendar, Clock, User, Briefcase, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface ClientWork {
   id: number; clientId: number; title: string; description?: string;
   assignedToId?: number; status: string; priority: string;
   startDate?: string; endDate?: string; actualStart?: string; actualEnd?: string;
   durationDays?: number; completionPercent: number; notes?: string;
+  createdAt?: string;
   client?: { id: number; name: string; phone: string; company?: string };
   assignedTo?: { id: number; name: string };
 }
@@ -33,6 +34,7 @@ export default function ClientWorks() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [sortBy, setSortBy] = useState('createdAt_desc');
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<ClientWork | null>(null);
   const [form, setForm] = useState<any>(defaultForm);
@@ -67,9 +69,7 @@ export default function ClientWorks() {
   const openEdit = (w: ClientWork) => {
     setEditing(w);
     setForm({
-      ...w,
-      clientId: w.clientId,
-      assignedToId: w.assignedToId || '',
+      ...w, clientId: w.clientId, assignedToId: w.assignedToId || '',
       startDate: w.startDate ? w.startDate.split('T')[0] : '',
       endDate: w.endDate ? w.endDate.split('T')[0] : '',
       actualStart: w.actualStart ? w.actualStart.split('T')[0] : '',
@@ -79,15 +79,29 @@ export default function ClientWorks() {
   };
   const closeModal = () => { setModal(false); setEditing(null); setForm(defaultForm); };
 
-  const filtered = works.filter((w) => {
-    const matchSearch = w.title.toLowerCase().includes(search.toLowerCase()) ||
-      (w.client?.name || '').toLowerCase().includes(search.toLowerCase());
-    const matchStatus = !filterStatus || w.status === filterStatus;
-    return matchSearch && matchStatus;
-  });
-
   const isOverdue = (w: ClientWork) =>
     w.endDate && new Date(w.endDate) < new Date() && !['completed', 'cancelled'].includes(w.status);
+
+  const inProgressCount = works.filter((w) => w.status === 'in_progress').length;
+  const completedCount = works.filter((w) => w.status === 'completed').length;
+  const overdueCount = works.filter((w) => isOverdue(w)).length;
+
+  const filtered = works
+    .filter((w) => {
+      const matchSearch = w.title.toLowerCase().includes(search.toLowerCase()) ||
+        (w.client?.name || '').toLowerCase().includes(search.toLowerCase());
+      const matchStatus = !filterStatus || w.status === filterStatus;
+      return matchSearch && matchStatus;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'client_asc': return (a.client?.name || '').localeCompare(b.client?.name || '');
+        case 'endDate_asc': return (a.endDate || '9999').localeCompare(b.endDate || '9999');
+        case 'progress_desc': return b.completionPercent - a.completionPercent;
+        case 'createdAt_asc': return (a.createdAt || '').localeCompare(b.createdAt || '');
+        default: return (b.createdAt || '').localeCompare(a.createdAt || '');
+      }
+    });
 
   return (
     <div className="space-y-6">
@@ -101,8 +115,48 @@ export default function ClientWorks() {
         </button>
       </div>
 
-      <div className="card p-4 flex gap-4">
-        <div className="relative flex-1">
+      {/* Status Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="card flex items-center gap-4">
+          <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+            <Briefcase size={22} className="text-indigo-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{works.length}</p>
+            <p className="text-sm text-gray-500">Total Works</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-blue-200" onClick={() => setFilterStatus(filterStatus === 'in_progress' ? '' : 'in_progress')}>
+          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+            <Loader size={22} className="text-blue-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{inProgressCount}</p>
+            <p className="text-sm text-gray-500">In Progress</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-green-200" onClick={() => setFilterStatus(filterStatus === 'completed' ? '' : 'completed')}>
+          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+            <CheckCircle size={22} className="text-green-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{completedCount}</p>
+            <p className="text-sm text-gray-500">Completed</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4">
+          <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+            <AlertCircle size={22} className="text-red-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{overdueCount}</p>
+            <p className="text-sm text-gray-500">Overdue</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card p-4 flex gap-4 flex-wrap">
+        <div className="relative flex-1 min-w-48">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input className="form-input pl-9" placeholder="Search works..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
@@ -113,6 +167,13 @@ export default function ClientWorks() {
           <option value="completed">Completed</option>
           <option value="on_hold">On Hold</option>
           <option value="cancelled">Cancelled</option>
+        </select>
+        <select className="form-input w-48" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="createdAt_desc">Newest First</option>
+          <option value="createdAt_asc">Oldest First</option>
+          <option value="endDate_asc">Deadline (Soonest)</option>
+          <option value="progress_desc">Progress (Highest)</option>
+          <option value="client_asc">Client A–Z</option>
         </select>
       </div>
 
@@ -145,7 +206,6 @@ export default function ClientWorks() {
               {isOverdue(w) && <span className="badge bg-red-100 text-red-700">Overdue</span>}
             </div>
 
-            {/* Progress bar */}
             <div className="mb-3">
               <div className="flex justify-between text-xs text-gray-500 mb-1">
                 <span>Progress</span>
@@ -244,19 +304,19 @@ export default function ClientWorks() {
                   <input type="number" min="0" max="100" className="form-input" value={form.completionPercent || 0} onChange={(e) => setForm({ ...form, completionPercent: Number(e.target.value) })} />
                 </div>
                 <div>
-                  <label className="form-label">Planned Start Date</label>
+                  <label className="form-label">Planned Start</label>
                   <input type="date" className="form-input" value={form.startDate || ''} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
                 </div>
                 <div>
-                  <label className="form-label">Planned End Date</label>
+                  <label className="form-label">Planned End</label>
                   <input type="date" className="form-input" value={form.endDate || ''} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
                 </div>
                 <div>
-                  <label className="form-label">Actual Start Date</label>
+                  <label className="form-label">Actual Start</label>
                   <input type="date" className="form-input" value={form.actualStart || ''} onChange={(e) => setForm({ ...form, actualStart: e.target.value })} />
                 </div>
                 <div>
-                  <label className="form-label">Actual End Date</label>
+                  <label className="form-label">Actual End</label>
                   <input type="date" className="form-input" value={form.actualEnd || ''} onChange={(e) => setForm({ ...form, actualEnd: e.target.value })} />
                 </div>
                 <div className="col-span-2">

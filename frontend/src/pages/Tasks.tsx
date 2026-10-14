@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
-import { Plus, Edit, Trash2, Search, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Calendar, ListTodo, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface Task {
   id: number; title: string; description?: string; type: string;
   status: string; priority: string; groupId?: number;
   assignedToId?: number; startDate?: string; dueDate?: string; completedAt?: string;
+  createdAt?: string;
   assignedTo?: { id: number; name: string };
   createdBy?: { id: number; name: string };
   group?: { id: number; name: string };
@@ -19,11 +20,14 @@ const statusColors: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-800',
 };
 
+const priorityOrder: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+
 export default function Tasks() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [sortBy, setSortBy] = useState('createdAt_desc');
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const [form, setForm] = useState<any>({ title: '', type: 'daily', status: 'pending', priority: 'medium' });
@@ -66,14 +70,30 @@ export default function Tasks() {
   };
   const closeModal = () => { setModal(false); setEditing(null); };
 
-  const filtered = tasks.filter((t) => {
-    const matchSearch = t.title.toLowerCase().includes(search.toLowerCase());
-    const matchType = !filterType || t.type === filterType;
-    const matchStatus = !filterStatus || t.status === filterStatus;
-    return matchSearch && matchType && matchStatus;
-  });
-
   const isOverdue = (t: Task) => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'completed';
+
+  const pendingCount = tasks.filter((t) => t.status === 'pending').length;
+  const inProgressCount = tasks.filter((t) => t.status === 'in_progress').length;
+  const completedCount = tasks.filter((t) => t.status === 'completed').length;
+  const overdueCount = tasks.filter((t) => isOverdue(t)).length;
+
+  const filtered = tasks
+    .filter((t) => {
+      const matchSearch = t.title.toLowerCase().includes(search.toLowerCase());
+      const matchType = !filterType || t.type === filterType;
+      const matchStatus = !filterStatus || t.status === filterStatus;
+      return matchSearch && matchType && matchStatus;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'priority': return (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9);
+        case 'dueDate_asc': return (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
+        case 'dueDate_desc': return (b.dueDate || '').localeCompare(a.dueDate || '');
+        case 'title_asc': return a.title.localeCompare(b.title);
+        case 'createdAt_asc': return (a.createdAt || '').localeCompare(b.createdAt || '');
+        default: return (b.createdAt || '').localeCompare(a.createdAt || '');
+      }
+    });
 
   return (
     <div className="space-y-6">
@@ -85,6 +105,46 @@ export default function Tasks() {
         <button onClick={openAdd} className="btn-primary flex items-center gap-2">
           <Plus size={16} /> Add Task
         </button>
+      </div>
+
+      {/* Status Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-yellow-200" onClick={() => setFilterStatus(filterStatus === 'pending' ? '' : 'pending')}>
+          <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
+            <ListTodo size={22} className="text-yellow-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{pendingCount}</p>
+            <p className="text-sm text-gray-500">Pending</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-blue-200" onClick={() => setFilterStatus(filterStatus === 'in_progress' ? '' : 'in_progress')}>
+          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+            <Loader size={22} className="text-blue-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{inProgressCount}</p>
+            <p className="text-sm text-gray-500">In Progress</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-green-200" onClick={() => setFilterStatus(filterStatus === 'completed' ? '' : 'completed')}>
+          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+            <CheckCircle size={22} className="text-green-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{completedCount}</p>
+            <p className="text-sm text-gray-500">Completed</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4">
+          <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+            <AlertCircle size={22} className="text-red-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{overdueCount}</p>
+            <p className="text-sm text-gray-500">Overdue</p>
+          </div>
+        </div>
       </div>
 
       <div className="card p-4 flex gap-3 flex-wrap">
@@ -104,6 +164,15 @@ export default function Tasks() {
           <option value="pending">Pending</option>
           <option value="in_progress">In Progress</option>
           <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <select className="form-input w-44" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="createdAt_desc">Newest First</option>
+          <option value="createdAt_asc">Oldest First</option>
+          <option value="dueDate_asc">Due Date (Soonest)</option>
+          <option value="dueDate_desc">Due Date (Latest)</option>
+          <option value="priority">By Priority</option>
+          <option value="title_asc">Title A–Z</option>
         </select>
       </div>
 
