@@ -126,24 +126,24 @@ export default function Reports() {
         </div>
       </div>
 
-      <div className="card p-4 flex gap-3 flex-wrap">
+      <div className="card p-4 flex flex-row items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-48">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input className="form-input pl-9" placeholder="Search reports..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
-        <select className="form-input w-36" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+        <select style={{ width: '9rem' }} className="form-input" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
           <option value="">All Types</option>
           <option value="daily">Daily</option>
           <option value="weekly">Weekly</option>
           <option value="monthly">Monthly</option>
         </select>
-        <select className="form-input w-40" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+        <select style={{ width: '10rem' }} className="form-input" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
           <option value="">All Status</option>
           <option value="submitted">Submitted</option>
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </select>
-        <select className="form-input w-48" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+        <select style={{ width: '12rem' }} className="form-input" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
           <option value="reportDate_desc">Report Date (Recent)</option>
           <option value="reportDate_asc">Report Date (Oldest)</option>
           <option value="hours_desc">Hours (Highest)</option>

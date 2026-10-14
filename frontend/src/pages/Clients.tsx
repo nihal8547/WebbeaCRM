@@ -104,7 +104,7 @@ export default function Clients() {
         </div>
       </div>
 
-      <div className="card p-4 flex gap-3 flex-wrap">
+      <div className="card p-4 flex flex-row items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-48">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
