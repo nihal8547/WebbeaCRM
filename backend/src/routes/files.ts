@@ -75,7 +75,8 @@ router.get('/:module/:entityId', async (req: AuthRequest, res: Response) => {
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id as string);
-    const isAdmin = req.user!.roleName === 'Admin';
+    const role = req.user?.roleName?.toLowerCase();
+    const isAdmin = role === 'admin' || role === 'manager';
 
     const file = await prisma.fileAttachment.findFirst({
       where: isAdmin ? { id } : { id, userId: req.user!.id },

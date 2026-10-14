@@ -8,7 +8,8 @@ router.use(authenticate);
 // GET / - list activity logs
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const isAdmin = req.user!.roleName === 'Admin';
+    const role = req.user?.roleName?.toLowerCase();
+    const isAdmin = role === 'admin' || role === 'manager';
     const moduleFilter = req.query.module as string | undefined;
 
     const where: any = {};

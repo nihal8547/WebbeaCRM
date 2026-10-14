@@ -69,7 +69,8 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 // POST /generate - admin: generate overdue task notifications and follow-up reminders
 router.post('/generate', async (req: AuthRequest, res: Response) => {
   try {
-    if (req.user!.roleName !== 'Admin') {
+    const role = req.user?.roleName?.toLowerCase();
+    if (role !== 'admin' && role !== 'manager') {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -113,7 +114,7 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
 
     // Notify all admins about follow-up enquiries
     const admins = await prisma.user.findMany({
-      where: { isActive: true, role: { name: 'Admin' } },
+      where: { isActive: true, role: { name: { in: ['admin', 'Admin'] } } },
       select: { id: true },
     });
 
