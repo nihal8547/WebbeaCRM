@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
-import { Plus, Edit, Trash2, Search, PlusCircle, MinusCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, PlusCircle, MinusCircle, FileText, Send, CheckCircle, XCircle } from 'lucide-react';
+import SlidePanel from '../components/SlidePanel';
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',
@@ -15,7 +16,9 @@ const emptyItem = { description: '', quantity: 1, unitPrice: 0, total: 0 };
 export default function Quotations() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
-  const [modal, setModal] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('');
+  const [sortBy, setSortBy] = useState('createdAt_desc');
+  const [panel, setPanel] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState<any>({ subject: '', status: 'draft', discount: 0, tax: 0 });
   const [items, setItems] = useState<any[]>([{ ...emptyItem }]);
@@ -32,7 +35,7 @@ export default function Quotations() {
 
   const save = useMutation({
     mutationFn: (data: any) => editing ? api.put(`/quotations/${editing.id}`, data) : api.post('/quotations', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['quotations'] }); closeModal(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['quotations'] }); closePanel(); },
   });
 
   const del = useMutation({
@@ -40,14 +43,19 @@ export default function Quotations() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['quotations'] }),
   });
 
-  const openAdd = () => { setEditing(null); setForm({ subject: '', status: 'draft', discount: 0, tax: 0 }); setItems([{ ...emptyItem }]); setModal(true); };
+  const openAdd = () => {
+    setEditing(null);
+    setForm({ subject: '', status: 'draft', discount: 0, tax: 0 });
+    setItems([{ ...emptyItem }]);
+    setPanel(true);
+  };
   const openEdit = (q: any) => {
     setEditing(q);
     setForm({ ...q, clientId: q.clientId, validUntil: q.validUntil?.split('T')[0] || '' });
     setItems(q.items?.map((i: any) => ({ ...i })) || [{ ...emptyItem }]);
-    setModal(true);
+    setPanel(true);
   };
-  const closeModal = () => { setModal(false); setEditing(null); };
+  const closePanel = () => { setPanel(false); setEditing(null); };
 
   const updateItem = (idx: number, field: string, value: any) => {
     const updated = [...items];
@@ -63,11 +71,29 @@ export default function Quotations() {
   const taxAmt = subtotal * (Number(form.tax) || 0) / 100;
   const total = subtotal - discountAmt + taxAmt;
 
-  const filtered = quotations.filter((q) =>
-    q.quotationNo.includes(search) ||
-    q.subject.toLowerCase().includes(search.toLowerCase()) ||
-    (q.client?.name || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const draftCount = quotations.filter((q) => q.status === 'draft').length;
+  const sentCount = quotations.filter((q) => q.status === 'sent').length;
+  const acceptedCount = quotations.filter((q) => q.status === 'accepted').length;
+  const totalValue = quotations.reduce((s, q) => s + (q.totalAmount || 0), 0);
+
+  const filtered = quotations
+    .filter((q) => {
+      const matchSearch =
+        q.quotationNo.includes(search) ||
+        q.subject.toLowerCase().includes(search.toLowerCase()) ||
+        (q.client?.name || '').toLowerCase().includes(search.toLowerCase());
+      const matchStatus = !filterStatus || q.status === filterStatus;
+      return matchSearch && matchStatus;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'amount_desc': return b.totalAmount - a.totalAmount;
+        case 'amount_asc': return a.totalAmount - b.totalAmount;
+        case 'client_asc': return (a.client?.name || '').localeCompare(b.client?.name || '');
+        case 'createdAt_asc': return (a.createdAt || '').localeCompare(b.createdAt || '');
+        default: return (b.createdAt || '').localeCompare(a.createdAt || '');
+      }
+    });
 
   return (
     <div className="space-y-6">
@@ -81,11 +107,65 @@ export default function Quotations() {
         </button>
       </div>
 
-      <div className="card p-4">
-        <div className="relative">
+      {/* Status Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="card flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+            <FileText size={22} className="text-blue-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{quotations.length}</p>
+            <p className="text-sm text-gray-500">Total</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-gray-300" onClick={() => setFilterStatus(filterStatus === 'draft' ? '' : 'draft')}>
+          <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
+            <FileText size={22} className="text-gray-500" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{draftCount}</p>
+            <p className="text-sm text-gray-500">Drafts</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-blue-200" onClick={() => setFilterStatus(filterStatus === 'sent' ? '' : 'sent')}>
+          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+            <Send size={22} className="text-blue-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{sentCount}</p>
+            <p className="text-sm text-gray-500">Sent</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4 cursor-pointer hover:border-green-200" onClick={() => setFilterStatus(filterStatus === 'accepted' ? '' : 'accepted')}>
+          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+            <CheckCircle size={22} className="text-green-600" />
+          </div>
+          <div>
+            <p className="text-xl font-bold text-gray-900">₹{(totalValue / 1000).toFixed(0)}k</p>
+            <p className="text-sm text-gray-500">{acceptedCount} Accepted</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card p-4 flex gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-48">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input className="form-input pl-9" placeholder="Search quotations..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
+        <select className="form-input w-36" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+          <option value="">All Status</option>
+          <option value="draft">Draft</option>
+          <option value="sent">Sent</option>
+          <option value="accepted">Accepted</option>
+          <option value="rejected">Rejected</option>
+        </select>
+        <select className="form-input w-44" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="createdAt_desc">Newest First</option>
+          <option value="createdAt_asc">Oldest First</option>
+          <option value="amount_desc">Amount (Highest)</option>
+          <option value="amount_asc">Amount (Lowest)</option>
+          <option value="client_asc">Client A–Z</option>
+        </select>
       </div>
 
       <div className="card p-0 overflow-hidden">
@@ -125,129 +205,136 @@ export default function Quotations() {
           )}
       </div>
 
-      {modal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b">
-              <h2 className="text-lg font-semibold">{editing ? 'Edit Quotation' : 'New Quotation'}</h2>
+      {/* Full-page slide panel */}
+      <SlidePanel
+        open={panel}
+        onClose={closePanel}
+        title={editing ? 'Edit Quotation' : 'New Quotation'}
+        subtitle={editing ? `Editing ${editing.quotationNo}` : 'Create a new quotation for a client'}
+        width="max-w-3xl"
+      >
+        <form onSubmit={(e) => { e.preventDefault(); save.mutate({ ...form, items }); }} className="p-6 space-y-6">
+          {/* Basic info */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <label className="form-label">Client *</label>
+              <select className="form-input" value={form.clientId || ''} onChange={(e) => setForm({ ...form, clientId: e.target.value })} required>
+                <option value="">Select Client</option>
+                {clients.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
             </div>
-            <form onSubmit={(e) => { e.preventDefault(); save.mutate({ ...form, items }); }} className="p-6 space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="form-label">Client *</label>
-                  <select className="form-input" value={form.clientId || ''} onChange={(e) => setForm({ ...form, clientId: e.target.value })} required>
-                    <option value="">Select Client</option>
-                    {clients.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="form-label">Subject *</label>
-                  <input className="form-input" value={form.subject || ''} onChange={(e) => setForm({ ...form, subject: e.target.value })} required />
-                </div>
-                <div>
-                  <label className="form-label">Status</label>
-                  <select className="form-input" value={form.status || 'draft'} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                    <option value="draft">Draft</option>
-                    <option value="sent">Sent</option>
-                    <option value="accepted">Accepted</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Valid Until</label>
-                  <input type="date" className="form-input" value={form.validUntil || ''} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} />
-                </div>
-              </div>
-
-              {/* Items */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-medium text-gray-800">Line Items</h3>
-                  <button type="button" onClick={() => setItems([...items, { ...emptyItem }])} className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm">
-                    <PlusCircle size={16} /> Add Item
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  <div className="grid grid-cols-12 gap-2 text-xs font-medium text-gray-500 px-1">
-                    <div className="col-span-5">Description</div>
-                    <div className="col-span-2">Qty</div>
-                    <div className="col-span-2">Unit Price</div>
-                    <div className="col-span-2">Total</div>
-                    <div className="col-span-1"></div>
-                  </div>
-                  {items.map((item, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                      <div className="col-span-5">
-                        <input className="form-input" value={item.description} onChange={(e) => updateItem(idx, 'description', e.target.value)} placeholder="Description" required />
-                      </div>
-                      <div className="col-span-2">
-                        <input type="number" min="0" className="form-input" value={item.quantity} onChange={(e) => updateItem(idx, 'quantity', e.target.value)} />
-                      </div>
-                      <div className="col-span-2">
-                        <input type="number" min="0" className="form-input" value={item.unitPrice} onChange={(e) => updateItem(idx, 'unitPrice', e.target.value)} />
-                      </div>
-                      <div className="col-span-2">
-                        <input className="form-input bg-gray-50" value={`₹${(Number(item.quantity) * Number(item.unitPrice)).toFixed(2)}`} readOnly />
-                      </div>
-                      <div className="col-span-1">
-                        {items.length > 1 && (
-                          <button type="button" onClick={() => setItems(items.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600">
-                            <MinusCircle size={18} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Totals */}
-              <div className="border-t pt-4 space-y-2">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="form-label">Discount (%)</label>
-                    <input type="number" min="0" max="100" className="form-input" value={form.discount || 0} onChange={(e) => setForm({ ...form, discount: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="form-label">Tax (%)</label>
-                    <input type="number" min="0" className="form-input" value={form.tax || 0} onChange={(e) => setForm({ ...form, tax: e.target.value })} />
-                  </div>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-1.5 text-sm">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Subtotal</span><span>₹{subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-red-600">
-                    <span>Discount ({form.discount || 0}%)</span><span>-₹{discountAmt.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-green-600">
-                    <span>Tax ({form.tax || 0}%)</span><span>+₹{taxAmt.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-gray-900 border-t pt-1.5">
-                    <span>Total</span><span>₹{total.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">Notes</label>
-                  <textarea className="form-input" rows={2} value={form.notes || ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-                </div>
-                <div>
-                  <label className="form-label">Terms & Conditions</label>
-                  <textarea className="form-input" rows={2} value={form.terms || ''} onChange={(e) => setForm({ ...form, terms: e.target.value })} />
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button type="submit" disabled={save.isPending} className="btn-primary flex-1">{save.isPending ? 'Saving...' : 'Save'}</button>
-                <button type="button" onClick={closeModal} className="btn-secondary flex-1">Cancel</button>
-              </div>
-            </form>
+            <div className="col-span-2">
+              <label className="form-label">Subject *</label>
+              <input className="form-input" placeholder="e.g. Website Development Project" value={form.subject || ''} onChange={(e) => setForm({ ...form, subject: e.target.value })} required />
+            </div>
+            <div>
+              <label className="form-label">Status</label>
+              <select className="form-input" value={form.status || 'draft'} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                <option value="draft">Draft</option>
+                <option value="sent">Sent</option>
+                <option value="accepted">Accepted</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Valid Until</label>
+              <input type="date" className="form-input" value={form.validUntil || ''} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} />
+            </div>
           </div>
-        </div>
-      )}
+
+          {/* Line Items */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-800">Line Items</h3>
+              <button type="button" onClick={() => setItems([...items, { ...emptyItem }])} className="text-blue-600 hover:text-blue-800 flex items-center gap-1.5 text-sm font-medium">
+                <PlusCircle size={16} /> Add Item
+              </button>
+            </div>
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="grid grid-cols-12 gap-0 text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5 bg-gray-50">
+                <div className="col-span-5">Description</div>
+                <div className="col-span-2 text-center">Qty</div>
+                <div className="col-span-2 text-center">Unit Price</div>
+                <div className="col-span-2 text-right">Total</div>
+                <div className="col-span-1"></div>
+              </div>
+              {items.map((item, idx) => (
+                <div key={idx} className="grid grid-cols-12 gap-2 items-center px-4 py-2.5 border-t border-gray-100">
+                  <div className="col-span-5">
+                    <input className="form-input" value={item.description} onChange={(e) => updateItem(idx, 'description', e.target.value)} placeholder="Item description" required />
+                  </div>
+                  <div className="col-span-2">
+                    <input type="number" min="0" className="form-input text-center" value={item.quantity} onChange={(e) => updateItem(idx, 'quantity', e.target.value)} />
+                  </div>
+                  <div className="col-span-2">
+                    <input type="number" min="0" className="form-input text-right" value={item.unitPrice} onChange={(e) => updateItem(idx, 'unitPrice', e.target.value)} />
+                  </div>
+                  <div className="col-span-2 text-right text-sm font-semibold text-gray-700 pr-2">
+                    ₹{(Number(item.quantity) * Number(item.unitPrice)).toLocaleString()}
+                  </div>
+                  <div className="col-span-1 flex justify-center">
+                    {items.length > 1 && (
+                      <button type="button" onClick={() => setItems(items.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600">
+                        <MinusCircle size={18} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Totals */}
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <label className="form-label">Discount (%)</label>
+                <input type="number" min="0" max="100" className="form-input" value={form.discount || 0} onChange={(e) => setForm({ ...form, discount: e.target.value })} />
+              </div>
+              <div>
+                <label className="form-label">Tax (%)</label>
+                <input type="number" min="0" className="form-input" value={form.tax || 0} onChange={(e) => setForm({ ...form, tax: e.target.value })} />
+              </div>
+              <div>
+                <label className="form-label">Notes</label>
+                <textarea className="form-input" rows={2} value={form.notes || ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+              </div>
+              <div>
+                <label className="form-label">Terms & Conditions</label>
+                <textarea className="form-input" rows={2} value={form.terms || ''} onChange={(e) => setForm({ ...form, terms: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <div className="bg-gray-50 rounded-xl p-5 space-y-3 sticky top-4">
+                <h4 className="font-semibold text-gray-800 mb-4">Summary</h4>
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Subtotal</span>
+                  <span className="font-medium">₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-sm text-red-600">
+                  <span>Discount ({form.discount || 0}%)</span>
+                  <span>-₹{discountAmt.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Tax ({form.tax || 0}%)</span>
+                  <span>+₹{taxAmt.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-lg font-bold text-gray-900 border-t border-gray-200 pt-3">
+                  <span>Total</span>
+                  <span>₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2 border-t border-gray-100">
+            <button type="submit" disabled={save.isPending} className="btn-primary flex-1 py-2.5">
+              {save.isPending ? 'Saving...' : editing ? 'Update Quotation' : 'Create Quotation'}
+            </button>
+            <button type="button" onClick={closePanel} className="btn-secondary flex-1 py-2.5">Cancel</button>
+          </div>
+        </form>
+      </SlidePanel>
     </div>
   );
 }

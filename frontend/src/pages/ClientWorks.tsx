@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
 import { Plus, Edit, Trash2, Search, Calendar, Clock, User, Briefcase, Loader, CheckCircle, AlertCircle } from 'lucide-react';
+import SlidePanel from '../components/SlidePanel';
 
 interface ClientWork {
   id: number; clientId: number; title: string; description?: string;
@@ -35,7 +36,7 @@ export default function ClientWorks() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [sortBy, setSortBy] = useState('createdAt_desc');
-  const [modal, setModal] = useState(false);
+  const [panel, setPanel] = useState(false);
   const [editing, setEditing] = useState<ClientWork | null>(null);
   const [form, setForm] = useState<any>(defaultForm);
 
@@ -57,7 +58,7 @@ export default function ClientWorks() {
   const save = useMutation({
     mutationFn: (data: any) =>
       editing ? api.put(`/client-works/${editing.id}`, data) : api.post('/client-works', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['client-works'] }); closeModal(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['client-works'] }); closePanel(); },
   });
 
   const del = useMutation({
@@ -65,7 +66,7 @@ export default function ClientWorks() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['client-works'] }),
   });
 
-  const openAdd = () => { setEditing(null); setForm(defaultForm); setModal(true); };
+  const openAdd = () => { setEditing(null); setForm(defaultForm); setPanel(true); };
   const openEdit = (w: ClientWork) => {
     setEditing(w);
     setForm({
@@ -75,9 +76,9 @@ export default function ClientWorks() {
       actualStart: w.actualStart ? w.actualStart.split('T')[0] : '',
       actualEnd: w.actualEnd ? w.actualEnd.split('T')[0] : '',
     });
-    setModal(true);
+    setPanel(true);
   };
-  const closeModal = () => { setModal(false); setEditing(null); setForm(defaultForm); };
+  const closePanel = () => { setPanel(false); setEditing(null); setForm(defaultForm); };
 
   const isOverdue = (w: ClientWork) =>
     w.endDate && new Date(w.endDate) < new Date() && !['completed', 'cancelled'].includes(w.status);
@@ -250,90 +251,88 @@ export default function ClientWorks() {
         ))}
       </div>
 
-      {modal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b">
-              <h2 className="text-lg font-semibold">{editing ? 'Edit Work' : 'Add Client Work'}</h2>
-            </div>
-            <form onSubmit={(e) => { e.preventDefault(); save.mutate(form); }} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="form-label">Title *</label>
-                  <input className="form-input" value={form.title || ''} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
-                </div>
-                <div className="col-span-2">
-                  <label className="form-label">Client *</label>
-                  <select className="form-input" value={form.clientId || ''} onChange={(e) => setForm({ ...form, clientId: e.target.value })} required>
-                    <option value="">Select Client</option>
-                    {clients.map((c: any) => <option key={c.id} value={c.id}>{c.name} {c.company ? `(${c.company})` : ''}</option>)}
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="form-label">Description</label>
-                  <textarea className="form-input" rows={3} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-                </div>
-                <div>
-                  <label className="form-label">Status</label>
-                  <select className="form-input" value={form.status || 'pending'} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                    <option value="pending">Pending</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                    <option value="on_hold">On Hold</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Priority</label>
-                  <select className="form-input" value={form.priority || 'medium'} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Assigned To</label>
-                  <select className="form-input" value={form.assignedToId || ''} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })}>
-                    <option value="">Unassigned</option>
-                    {users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Completion %</label>
-                  <input type="number" min="0" max="100" className="form-input" value={form.completionPercent || 0} onChange={(e) => setForm({ ...form, completionPercent: Number(e.target.value) })} />
-                </div>
-                <div>
-                  <label className="form-label">Planned Start</label>
-                  <input type="date" className="form-input" value={form.startDate || ''} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
-                </div>
-                <div>
-                  <label className="form-label">Planned End</label>
-                  <input type="date" className="form-input" value={form.endDate || ''} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
-                </div>
-                <div>
-                  <label className="form-label">Actual Start</label>
-                  <input type="date" className="form-input" value={form.actualStart || ''} onChange={(e) => setForm({ ...form, actualStart: e.target.value })} />
-                </div>
-                <div>
-                  <label className="form-label">Actual End</label>
-                  <input type="date" className="form-input" value={form.actualEnd || ''} onChange={(e) => setForm({ ...form, actualEnd: e.target.value })} />
-                </div>
-                <div className="col-span-2">
-                  <label className="form-label">Notes</label>
-                  <textarea className="form-input" rows={2} value={form.notes || ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-                </div>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="submit" disabled={save.isPending} className="btn-primary flex-1">
-                  {save.isPending ? 'Saving...' : 'Save'}
-                </button>
-                <button type="button" onClick={closeModal} className="btn-secondary flex-1">Cancel</button>
-              </div>
-            </form>
+      <SlidePanel
+        open={panel}
+        onClose={closePanel}
+        title={editing ? 'Edit Work' : 'Add Client Work'}
+        subtitle={editing ? `Editing: ${editing.title}` : 'Create a new client work entry'}
+      >
+        <form onSubmit={(e) => { e.preventDefault(); save.mutate(form); }} className="p-6 space-y-5">
+          <div>
+            <label className="form-label">Title *</label>
+            <input className="form-input" value={form.title || ''} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
           </div>
-        </div>
-      )}
+          <div>
+            <label className="form-label">Client *</label>
+            <select className="form-input" value={form.clientId || ''} onChange={(e) => setForm({ ...form, clientId: e.target.value })} required>
+              <option value="">Select Client</option>
+              {clients.map((c: any) => <option key={c.id} value={c.id}>{c.name} {c.company ? `(${c.company})` : ''}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="form-label">Description</label>
+            <textarea className="form-input" rows={3} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">Status</label>
+              <select className="form-input" value={form.status || 'pending'} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                <option value="pending">Pending</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="on_hold">On Hold</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Priority</label>
+              <select className="form-input" value={form.priority || 'medium'} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Assigned To</label>
+              <select className="form-input" value={form.assignedToId || ''} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })}>
+                <option value="">Unassigned</option>
+                {users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Completion %</label>
+              <input type="number" min="0" max="100" className="form-input" value={form.completionPercent || 0} onChange={(e) => setForm({ ...form, completionPercent: Number(e.target.value) })} />
+            </div>
+            <div>
+              <label className="form-label">Planned Start</label>
+              <input type="date" className="form-input" value={form.startDate || ''} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+            </div>
+            <div>
+              <label className="form-label">Planned End</label>
+              <input type="date" className="form-input" value={form.endDate || ''} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+            </div>
+            <div>
+              <label className="form-label">Actual Start</label>
+              <input type="date" className="form-input" value={form.actualStart || ''} onChange={(e) => setForm({ ...form, actualStart: e.target.value })} />
+            </div>
+            <div>
+              <label className="form-label">Actual End</label>
+              <input type="date" className="form-input" value={form.actualEnd || ''} onChange={(e) => setForm({ ...form, actualEnd: e.target.value })} />
+            </div>
+          </div>
+          <div>
+            <label className="form-label">Notes</label>
+            <textarea className="form-input" rows={2} value={form.notes || ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          </div>
+          <div className="flex gap-3 pt-2 border-t border-gray-100">
+            <button type="submit" disabled={save.isPending} className="btn-primary flex-1 py-2.5">
+              {save.isPending ? 'Saving...' : editing ? 'Update Work' : 'Add Work'}
+            </button>
+            <button type="button" onClick={closePanel} className="btn-secondary flex-1 py-2.5">Cancel</button>
+          </div>
+        </form>
+      </SlidePanel>
     </div>
   );
 }
