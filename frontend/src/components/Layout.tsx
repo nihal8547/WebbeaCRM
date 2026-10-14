@@ -32,11 +32,11 @@ const menuSections = [
       {
         label: 'Tasks', icon: ClipboardList, permission: 'tasks:view',
         children: [
-          { path: '/tasks', label: 'All Tasks' },
-          { path: '/task-groups', label: 'Groups' },
+          { path: '/tasks', label: 'All Tasks', permission: 'tasks:view' },
+          { path: '/task-groups', label: 'Groups', permission: 'task-groups:view' },
         ],
       },
-      { path: '/works', label: 'My Works', icon: Hammer, permission: 'reports:view' },
+      { path: '/works', label: 'My Works', icon: Hammer, permission: 'works:view' },
       { path: '/reports', label: 'Work Reports', icon: BarChart2, permission: 'reports:view' },
     ],
   },
@@ -45,25 +45,25 @@ const menuSections = [
     items: [
       { path: '/quotations', label: 'Quotations', icon: FileText, permission: 'quotations:view' },
       { path: '/payments', label: 'Payments', icon: CreditCard, permission: 'payments:view' },
-      { path: '/products', label: 'Products', icon: Package, permission: 'clients:view' },
+      { path: '/products', label: 'Products', icon: Package, permission: 'products:view' },
     ],
   },
   {
     label: 'Tools',
     items: [
-      { path: '/calendar', label: 'Calendar', icon: Calendar, permission: 'dashboard:view' },
-      { path: '/attendance', label: 'Attendance', icon: Clock, permission: 'dashboard:view' },
+      { path: '/calendar', label: 'Calendar', icon: Calendar, permission: 'calendar:view' },
+      { path: '/attendance', label: 'Attendance', icon: Clock, permission: 'attendance:view' },
     ],
   },
   {
     label: 'Admin',
     items: [
       {
-        label: 'Admin', icon: Settings, permission: 'users:view',
+        label: 'Admin', icon: Settings,
         children: [
-          { path: '/users', label: 'Users' },
-          { path: '/roles', label: 'Roles & Permissions' },
-          { path: '/activity-log', label: 'Activity Log' },
+          { path: '/users', label: 'Users', permission: 'users:view' },
+          { path: '/roles', label: 'Roles & Permissions', permission: 'roles:view' },
+          { path: '/activity-log', label: 'Activity Log', permission: 'activity-logs:view' },
         ],
       },
     ],
@@ -123,14 +123,24 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Nav */}
         <nav className="sidebar-nav flex-1 overflow-y-auto py-2 px-2">
           {menuSections.map((section) => {
-            const visibleItems = section.items.filter((item) => can(item.permission));
+            const visibleItems = section.items
+              .map((item: any) => {
+                if (item.children) {
+                  const visibleChildren = item.children.filter((child: any) => !child.permission || can(child.permission));
+                  if (visibleChildren.length === 0) return null;
+                  return { ...item, children: visibleChildren };
+                }
+                return (!item.permission || can(item.permission)) ? item : null;
+              })
+              .filter(Boolean) as any[];
+
             if (visibleItems.length === 0) return null;
 
             return (
               <div key={section.label}>
                 <p className="sidebar-section-label">{section.label}</p>
                 <div className="space-y-0.5 mb-1">
-                  {visibleItems.map((item) => {
+                  {visibleItems.map((item: any) => {
                     if (item.children) {
                       const expanded = expandedMenus.includes(item.label);
                       return (
@@ -147,7 +157,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                           </button>
                           {expanded && (
                             <div className="ml-2 mt-0.5 mb-1 space-y-0.5 pl-5 border-l border-white/10">
-                              {item.children.map((child) => (
+                              {item.children.map((child: any) => (
                                 <Link
                                   key={child.path}
                                   to={child.path}

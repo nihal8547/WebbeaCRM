@@ -26,14 +26,29 @@ import ActivityLog from './pages/ActivityLog';
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30000 } } });
 
-function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+function PrivateRoute({ children, permission }: { children: React.ReactNode; permission?: string }) {
+  const { user, loading, can } = useAuth();
   if (loading) return (
     <div className="flex items-center justify-center h-screen">
       <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
     </div>
   );
   if (!user) return <Navigate to="/login" />;
+  if (permission && !can(permission)) {
+    return (
+      <Layout>
+        <div className="card p-12 text-center max-w-lg mx-auto mt-12">
+          <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 font-bold text-xl">
+            !
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h2>
+          <p className="text-gray-500 text-sm">
+            You do not have permission to view this page. Please contact your administrator if you need access.
+          </p>
+        </div>
+      </Layout>
+    );
+  }
   return <Layout>{children}</Layout>;
 }
 
@@ -42,23 +57,23 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
-      <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-      <Route path="/clients" element={<PrivateRoute><Clients /></PrivateRoute>} />
-      <Route path="/client-works" element={<PrivateRoute><ClientWorks /></PrivateRoute>} />
-      <Route path="/enquiries" element={<PrivateRoute><Enquiries /></PrivateRoute>} />
-      <Route path="/tasks" element={<PrivateRoute><Tasks /></PrivateRoute>} />
-      <Route path="/task-groups" element={<PrivateRoute><TaskGroups /></PrivateRoute>} />
-      <Route path="/quotations" element={<PrivateRoute><Quotations /></PrivateRoute>} />
-      <Route path="/payments" element={<PrivateRoute><Payments /></PrivateRoute>} />
-      <Route path="/reports" element={<PrivateRoute><Reports /></PrivateRoute>} />
-      <Route path="/works" element={<PrivateRoute><Works /></PrivateRoute>} />
-      <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
-      <Route path="/roles" element={<PrivateRoute><Roles /></PrivateRoute>} />
+      <Route path="/" element={<PrivateRoute permission="dashboard:view"><Dashboard /></PrivateRoute>} />
+      <Route path="/clients" element={<PrivateRoute permission="clients:view"><Clients /></PrivateRoute>} />
+      <Route path="/client-works" element={<PrivateRoute permission="client-works:view"><ClientWorks /></PrivateRoute>} />
+      <Route path="/enquiries" element={<PrivateRoute permission="enquiries:view"><Enquiries /></PrivateRoute>} />
+      <Route path="/tasks" element={<PrivateRoute permission="tasks:view"><Tasks /></PrivateRoute>} />
+      <Route path="/task-groups" element={<PrivateRoute permission="task-groups:view"><TaskGroups /></PrivateRoute>} />
+      <Route path="/quotations" element={<PrivateRoute permission="quotations:view"><Quotations /></PrivateRoute>} />
+      <Route path="/payments" element={<PrivateRoute permission="payments:view"><Payments /></PrivateRoute>} />
+      <Route path="/reports" element={<PrivateRoute permission="reports:view"><Reports /></PrivateRoute>} />
+      <Route path="/works" element={<PrivateRoute permission="works:view"><Works /></PrivateRoute>} />
+      <Route path="/users" element={<PrivateRoute permission="users:view"><Users /></PrivateRoute>} />
+      <Route path="/roles" element={<PrivateRoute permission="roles:view"><Roles /></PrivateRoute>} />
       <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-      <Route path="/products" element={<PrivateRoute><Products /></PrivateRoute>} />
-      <Route path="/calendar" element={<PrivateRoute><Calendar /></PrivateRoute>} />
-      <Route path="/attendance" element={<PrivateRoute><Attendance /></PrivateRoute>} />
-      <Route path="/activity-log" element={<PrivateRoute><ActivityLog /></PrivateRoute>} />
+      <Route path="/products" element={<PrivateRoute permission="products:view"><Products /></PrivateRoute>} />
+      <Route path="/calendar" element={<PrivateRoute permission="calendar:view"><Calendar /></PrivateRoute>} />
+      <Route path="/attendance" element={<PrivateRoute permission="attendance:view"><Attendance /></PrivateRoute>} />
+      <Route path="/activity-log" element={<PrivateRoute permission="activity-logs:view"><ActivityLog /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
