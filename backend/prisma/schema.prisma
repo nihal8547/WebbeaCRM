@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  phone     String?
+  roleId    Int
+  role      Role     @relation(fields: [roleId], references: [id])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks        Task[]       @relation("AssignedTo")
+  createdTasks Task[]       @relation("CreatedBy")
+  reports      WorkReport[]
+  clientWorks  ClientWork[]
+}
+
+model Role {
+  id          Int              @id @default(autoincrement())
+  name        String           @unique
+  description String?
+  permissions RolePermission[]
+  users       User[]
+  createdAt   DateTime         @default(now())
+}
+
+model Permission {
+  id          Int              @id @default(autoincrement())
+  module      String
+  action      String
+  description String?
+  roles       RolePermission[]
+
+  @@unique([module, action])
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+model Client {
+  id          Int          @id @default(autoincrement())
+  name        String
+  email       String?
+  phone       String
+  address     String?
+  company     String?
+  gst         String?
+  status      String       @default("active")
+  notes       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  enquiries   Enquiry[]
+  quotations  Quotation[]
+  payments    Payment[]
+  works       ClientWork[]
+}
+
+// Client Work - tracks multiple works/projects per client with durations
+model ClientWork {
+  id          Int       @id @default(autoincrement())
+  clientId    Int
+  client      Client    @relation(fields: [clientId], references: [id])
+  title       String
+  description String?
+  assignedToId Int?
+  assignedTo  User?     @relation(fields: [assignedToId], references: [id])
+  status      String    @default("pending")
+  priority    String    @default("medium")
+  startDate   DateTime?
+  endDate     DateTime?
+  actualStart DateTime?
+  actualEnd   DateTime?
+  durationDays Int?
+  completionPercent Int @default(0)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model TaskGroup {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  status      String   @default("active")
+  tasks       Task[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Task {
+  id           Int        @id @default(autoincrement())
+  title        String
+  description  String?
+  type         String     @default("daily")
+  status       String     @default("pending")
+  priority     String     @default("medium")
+  groupId      Int?
+  group        TaskGroup? @relation(fields: [groupId], references: [id])
+  assignedToId Int?
+  assignedTo   User?      @relation("AssignedTo", fields: [assignedToId], references: [id])
+  createdById  Int?
+  createdBy    User?      @relation("CreatedBy", fields: [createdById], references: [id])
+  startDate    DateTime?
+  dueDate      DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Enquiry {
+  id           Int       @id @default(autoincrement())
+  clientId     Int?
+  client       Client?   @relation(fields: [clientId], references: [id])
+  name         String
+  email        String?
+  phone        String
+  subject      String
+  description  String?
+  source       String?
+  status       String    @default("new")
+  priority     String    @default("medium")
+  followUpDate DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Quotation {
+  id          Int             @id @default(autoincrement())
+  quotationNo String          @unique
+  clientId    Int
+  client      Client          @relation(fields: [clientId], references: [id])
+  subject     String
+  status      String          @default("draft")
+  validUntil  DateTime?
+  discount    Float           @default(0)
+  tax         Float           @default(0)
+  notes       String?
+  terms       String?
+  totalAmount Float           @default(0)
+  items       QuotationItem[]
+  payments    Payment[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model QuotationItem {
+  id          Int       @id @default(autoincrement())
+  quotationId Int
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float
+  unitPrice   Float
+  total       Float
+}
+
+model Payment {
+  id            Int        @id @default(autoincrement())
+  paymentNo     String     @unique
+  clientId      Int
+  client        Client     @relation(fields: [clientId], references: [id])
+  quotationId   Int?
+  quotation     Quotation? @relation(fields: [quotationId], references: [id])
+  amount        Float
+  method        String     @default("cash")
+  status        String     @default("pending")
+  paidDate      DateTime?
+  dueDate       DateTime?
+  description   String?
+  receiptNumber String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model WorkReport {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  reportDate  DateTime
+  type        String   @default("daily")
+  title       String
+  description String
+  hoursWorked Float?
+  status      String   @default("submitted")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

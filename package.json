@@ -1,0 +1,12 @@
+{
+  "name": "webbeacrm",
+  "version": "1.0.0",
+  "description": "WebbeaCRM - Complete Business CRM System",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "seed": "cd backend && npm run seed",
+    "start": "cd backend && npm start"
+  }
+}
