@@ -80,4 +80,86 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /charts/revenue - monthly payment amounts for last 6 months
+router.get('/charts/revenue', async (req: AuthRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const months: { label: string; start: Date; end: Date }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      months.push({
+        label: start.toLocaleString('default', { month: 'short', year: 'numeric' }),
+        start,
+        end,
+      });
+    }
+
+    const data = await Promise.all(
+      months.map(async ({ label, start, end }) => {
+        const result = await prisma.payment.aggregate({
+          _sum: { amount: true },
+          where: { status: 'paid', paidDate: { gte: start, lt: end } },
+        });
+        return { month: label, amount: result._sum.amount ?? 0 };
+      })
+    );
+
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// GET /charts/tasks - task status counts
+router.get('/charts/tasks', async (req: AuthRequest, res: Response) => {
+  try {
+    const statuses = ['pending', 'in_progress', 'completed', 'cancelled'];
+    const data = await Promise.all(
+      statuses.map(async (status) => {
+        const count = await prisma.task.count({ where: { status } });
+        return { status, count };
+      })
+    );
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// GET /charts/enquiries - enquiry status counts
+router.get('/charts/enquiries', async (req: AuthRequest, res: Response) => {
+  try {
+    const statuses = ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'closed', 'lost'];
+    const data = await Promise.all(
+      statuses.map(async (status) => {
+        const count = await prisma.enquiry.count({ where: { status } });
+        return { status, count };
+      })
+    );
+    res.json(data.filter((d) => d.count > 0));
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// GET /charts/attendance - today's attendance count vs total users
+router.get('/charts/attendance', async (req: AuthRequest, res: Response) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [presentCount, totalUsers] = await Promise.all([
+      prisma.attendance.count({ where: { date: { gte: today, lt: tomorrow } } }),
+      prisma.user.count({ where: { isActive: true } }),
+    ]);
+
+    res.json({ presentCount, absentCount: totalUsers - presentCount, totalUsers });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 export default router;

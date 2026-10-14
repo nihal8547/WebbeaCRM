@@ -10,8 +10,16 @@ const generateQuotationNo = async () => {
   return `QT-${String(count + 1).padStart(4, '0')}`;
 };
 
-router.get('/', async (_req: AuthRequest, res: Response) => {
+router.get('/', async (req: AuthRequest, res: Response) => {
+  const search = req.query.search as string | undefined;
   const quotations = await prisma.quotation.findMany({
+    where: search ? {
+      OR: [
+        { quotationNo: { contains: search, mode: 'insensitive' } },
+        { subject: { contains: search, mode: 'insensitive' } },
+        { client: { name: { contains: search, mode: 'insensitive' } } },
+      ]
+    } : undefined,
     include: { client: true, items: true },
     orderBy: { createdAt: 'desc' },
   });

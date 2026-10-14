@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 
 dotenv.config();
 
@@ -17,10 +18,16 @@ import paymentRoutes from './routes/payments';
 import reportRoutes from './routes/reports';
 import workRoutes from './routes/works';
 import dashboardRoutes from './routes/dashboard';
+import productRoutes from './routes/products';
+import attendanceRoutes from './routes/attendance';
+import notificationRoutes from './routes/notifications';
+import activityLogRoutes from './routes/activity-logs';
+import fileRoutes from './routes/files';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -35,6 +42,11 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/works', workRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/activity-logs', activityLogRoutes);
+app.use('/api/files', fileRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

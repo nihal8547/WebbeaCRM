@@ -6,8 +6,13 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/', async (req: AuthRequest, res: Response) => {
-  const { status } = req.query;
-  const where = status ? { status: String(status) } : {};
+  const { status, search } = req.query;
+  const where: any = status ? { status: String(status) } : {};
+  if (search) where.OR = [
+    { name: { contains: String(search), mode: 'insensitive' } },
+    { subject: { contains: String(search), mode: 'insensitive' } },
+    { phone: { contains: String(search), mode: 'insensitive' } },
+  ];
   const enquiries = await prisma.enquiry.findMany({
     where,
     include: { client: true },

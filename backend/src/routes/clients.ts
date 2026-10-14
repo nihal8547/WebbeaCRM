@@ -5,8 +5,19 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 const router = Router();
 router.use(authenticate);
 
-router.get('/', async (_req: AuthRequest, res: Response) => {
-  const clients = await prisma.client.findMany({ orderBy: { createdAt: 'desc' } });
+router.get('/', async (req: AuthRequest, res: Response) => {
+  const search = req.query.search as string | undefined;
+  const clients = await prisma.client.findMany({
+    where: search ? {
+      OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+        { company: { contains: search, mode: 'insensitive' } },
+      ]
+    } : undefined,
+    orderBy: { createdAt: 'desc' },
+  });
   res.json(clients);
 });
 

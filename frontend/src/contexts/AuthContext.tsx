@@ -15,6 +15,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  setUser: (u: User) => void;
   can: (permission: string) => boolean;
 }
 
@@ -46,6 +47,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const logout = () => {
+    api.post('/auth/logout').catch(() => {});
     localStorage.removeItem('token');
     setUser(null);
   };
@@ -57,7 +59,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, can }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, setUser, can }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
-import { Plus, Edit, Trash2, Search, Building2, Phone, Mail, Users, UserCheck, UserX } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Building2, Phone, Mail, Users, UserCheck, UserX, Download } from 'lucide-react';
 
 interface Client {
   id: number; name: string; email?: string; phone: string;
@@ -40,6 +40,14 @@ export default function Clients() {
   const openEdit = (c: Client) => { setEditing(c); setForm(c); setModal(true); };
   const closeModal = () => { setModal(false); setEditing(null); setForm(defaultForm); };
 
+  const exportCSV = () => {
+    const headers = ['Name', 'Email', 'Phone', 'Company', 'GST', 'Status', 'Address'];
+    const rows = filtered.map((c) => [c.name, c.email || '', c.phone, c.company || '', c.gst || '', c.status, c.address || '']);
+    const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'clients.csv'; a.click();
+  };
+
   const activeCount = clients.filter((c) => c.status === 'active').length;
   const inactiveCount = clients.filter((c) => c.status === 'inactive').length;
 
@@ -68,9 +76,14 @@ export default function Clients() {
           <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
           <p className="text-gray-500 text-sm">{clients.length} total clients</p>
         </div>
-        <button onClick={openAdd} className="btn-primary flex items-center gap-2">
-          <Plus size={16} /> Add Client
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={exportCSV} className="btn-secondary flex items-center gap-2">
+            <Download size={15} /> Export
+          </button>
+          <button onClick={openAdd} className="btn-primary flex items-center gap-2">
+            <Plus size={16} /> Add Client
+          </button>
+        </div>
       </div>
 
       {/* Status Cards */}

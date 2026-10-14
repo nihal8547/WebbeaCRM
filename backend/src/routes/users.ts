@@ -29,6 +29,48 @@ router.post('/', authorize('admin'), async (req: AuthRequest, res: Response) => 
   }
 });
 
+// Self profile update (name, phone only)
+router.put('/:id/profile', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (req.user?.id !== id && req.user?.roleName !== 'admin') {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    const { name, phone } = req.body;
+    const user = await prisma.user.update({
+      where: { id },
+      data: { name, phone },
+      include: { role: true },
+    });
+    res.json({ ...user, password: undefined });
+  } catch {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Self password change
+router.put('/:id/password', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (req.user?.id !== id) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    const { oldPassword, newPassword } = req.body;
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const valid = await bcrypt.compare(oldPassword, user.password);
+    if (!valid) return res.status(400).json({ message: 'Current password is incorrect' });
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({ where: { id }, data: { password: hashed } });
+    res.json({ message: 'Password changed successfully' });
+  } catch {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Admin full update
 router.put('/:id', authorize('admin'), async (req: AuthRequest, res: Response) => {
   try {
     const { name, email, phone, roleId, isActive, password } = req.body;

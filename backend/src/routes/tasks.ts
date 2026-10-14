@@ -6,11 +6,15 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/', async (req: AuthRequest, res: Response) => {
-  const { type, status, assignedTo } = req.query;
+  const { type, status, assignedTo, search } = req.query;
   const where: any = {};
   if (type) where.type = String(type);
   if (status) where.status = String(status);
   if (assignedTo) where.assignedToId = Number(assignedTo);
+  if (search) where.OR = [
+    { title: { contains: String(search), mode: 'insensitive' } },
+    { description: { contains: String(search), mode: 'insensitive' } },
+  ];
 
   if (req.user?.roleName === 'employee') {
     where.assignedToId = req.user.id;

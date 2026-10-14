@@ -1,11 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LayoutDashboard, Briefcase, FileText, CreditCard,
   ClipboardList, MessageSquare, BarChart2, Settings, LogOut,
-  ChevronDown, Menu, X, FolderKanban, Building2, Hammer
+  ChevronDown, Menu, X, FolderKanban, Building2, Hammer,
+  Package, Calendar, Clock, Activity, Search, User
 } from 'lucide-react';
+import NotificationBell from './NotificationBell';
+import GlobalSearch from './GlobalSearch';
+import InactivityGuard from './InactivityGuard';
 
 const menuItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard:view' },
@@ -20,14 +24,18 @@ const menuItems = [
     ]
   },
   { path: '/works', label: 'My Works', icon: Hammer, permission: 'reports:view' },
+  { path: '/reports', label: 'Work Reports', icon: BarChart2, permission: 'reports:view' },
   { path: '/quotations', label: 'Quotations', icon: FileText, permission: 'quotations:view' },
   { path: '/payments', label: 'Payments', icon: CreditCard, permission: 'payments:view' },
-  { path: '/reports', label: 'Work Reports', icon: BarChart2, permission: 'reports:view' },
+  { path: '/products', label: 'Products', icon: Package, permission: 'clients:view' },
+  { path: '/calendar', label: 'Calendar', icon: Calendar, permission: 'dashboard:view' },
+  { path: '/attendance', label: 'Attendance', icon: Clock, permission: 'dashboard:view' },
   {
     label: 'Admin', icon: Settings, permission: 'users:view',
     children: [
       { path: '/users', label: 'Users' },
       { path: '/roles', label: 'Roles & Permissions' },
+      { path: '/activity-log', label: 'Activity Log' },
     ]
   },
 ];
@@ -38,6 +46,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Tasks', 'Admin']);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   const toggleMenu = (label: string) => {
     setExpandedMenus((prev) => prev.includes(label) ? prev.filter((m) => m !== label) : [...prev, label]);
@@ -146,8 +166,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           >
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
+
+          {/* Search trigger */}
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-400 text-sm transition-colors"
+          >
+            <Search size={14} />
+            <span className="hidden sm:inline">Search...</span>
+            <kbd className="hidden sm:inline bg-white text-gray-400 text-xs px-1.5 py-0.5 rounded border border-gray-200 ml-2">⌘K</kbd>
+          </button>
+
           <div className="flex-1" />
-          <div className="text-sm text-gray-600">
+
+          <NotificationBell />
+
+          <Link
+            to="/profile"
+            className={`flex items-center gap-2 p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${location.pathname === '/profile' ? 'bg-gray-100 text-gray-700' : ''}`}
+          >
+            <User size={18} />
+          </Link>
+
+          <div className="text-sm text-gray-600 hidden sm:block">
             Welcome, <span className="font-semibold text-gray-800">{user?.name}</span>
           </div>
         </header>
@@ -157,6 +198,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Global Search */}
+      {searchOpen && <GlobalSearch onClose={() => setSearchOpen(false)} />}
+
+      {/* Inactivity Guard */}
+      <InactivityGuard />
     </div>
   );
 }
