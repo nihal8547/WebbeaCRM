@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Briefcase, FileText, CreditCard,
   ClipboardList, MessageSquare, BarChart2, Settings, LogOut,
   ChevronDown, Menu, X, FolderKanban, Building2, Hammer,
-  Package, Calendar, Clock, Search, User
+  Package, Calendar, Clock, Search, User, KeyRound
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import GlobalSearch from './GlobalSearch';
@@ -23,6 +23,7 @@ const menuSections = [
     items: [
       { path: '/clients', label: 'Clients', icon: Building2, permission: 'clients:view' },
       { path: '/client-works', label: 'Client Works', icon: Briefcase, permission: 'client-works:view' },
+      { path: '/credentials', label: 'Credentials', icon: KeyRound, permission: 'clients:view' },
       { path: '/enquiries', label: 'Enquiries', icon: MessageSquare, permission: 'enquiries:view' },
     ],
   },

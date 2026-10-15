@@ -24,7 +24,18 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   const client = await prisma.client.findUnique({
     where: { id: Number(req.params.id) },
-    include: { enquiries: true, quotations: true, payments: true },
+    include: {
+      enquiries: { orderBy: { createdAt: 'desc' } },
+      quotations: { orderBy: { createdAt: 'desc' } },
+      payments: { orderBy: { createdAt: 'desc' } },
+      works: {
+        orderBy: { createdAt: 'desc' },
+        include: {
+          assignedTo: { select: { id: true, name: true } },
+          works: { select: { id: true, title: true, status: true, workDate: true, hoursWorked: true } },
+        },
+      },
+    },
   });
   if (!client) return res.status(404).json({ message: 'Not found' });
   res.json(client);

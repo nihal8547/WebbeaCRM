@@ -23,6 +23,7 @@ import Products from './pages/Products';
 import Calendar from './pages/Calendar';
 import Attendance from './pages/Attendance';
 import ActivityLog from './pages/ActivityLog';
+import Credentials from './pages/Credentials';
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30000 } } });
 
@@ -74,6 +75,7 @@ function AppRoutes() {
       <Route path="/calendar" element={<PrivateRoute permission="calendar:view"><Calendar /></PrivateRoute>} />
       <Route path="/attendance" element={<PrivateRoute permission="attendance:view"><Attendance /></PrivateRoute>} />
       <Route path="/activity-log" element={<PrivateRoute permission="activity-logs:view"><ActivityLog /></PrivateRoute>} />
+      <Route path="/credentials" element={<PrivateRoute permission="clients:view"><Credentials /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

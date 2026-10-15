@@ -74,6 +74,20 @@ model Client {
   quotations  Quotation[]
   payments    Payment[]
   works       ClientWork[]
+  credentials Credential[]
+}
+
+model Credential {
+  id        Int      @id @default(autoincrement())
+  clientId  Int
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  label     String
+  url       String?
+  username  String
+  password  String
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Client Work - tracks multiple works/projects per client with durations
