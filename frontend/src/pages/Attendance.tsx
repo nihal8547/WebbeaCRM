@@ -13,8 +13,15 @@ import {
   LogIn,
   LogOut,
   UserCheck,
+  Smartphone,
+  ShieldOff,
+  Toggle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+function isMobileBrowser(): boolean {
+  return /android|iphone|ipad|ipod|mobile|blackberry|windows phone/i.test(navigator.userAgent);
+}
 
 interface UserItem {
   id: number;
@@ -46,12 +53,27 @@ export default function Attendance() {
 
   const role = user?.role?.toLowerCase();
   const isAdmin = role === 'admin' || role === 'manager';
+  const isMobile = useMemo(() => isMobileBrowser(), []);
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
   const [filterDate, setFilterDate] = useState<string>(todayStr);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Fetch app settings
+  const { data: settings = {} } = useQuery<Record<string, string>>({
+    queryKey: ['settings'],
+    queryFn: () => api.get('/settings').then((r) => r.data),
+  });
+  const blockMobileCheckin = settings['blockMobileCheckin'] === 'true';
+
+  // Toggle setting mutation (admin only)
+  const toggleMobileSetting = useMutation({
+    mutationFn: (value: boolean) => api.put('/settings/blockMobileCheckin', { value: String(value) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['settings'] }); toast.success('Setting updated'); },
+    onError: () => toast.error('Failed to update setting'),
+  });
 
   // Fetch users list for admin filter dropdown
   const { data: users = [] } = useQuery<UserItem[]>({
@@ -194,9 +216,31 @@ export default function Attendance() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          {/* Admin toggle: block mobile check-in */}
+          {isAdmin && (
+            <button
+              onClick={() => toggleMobileSetting.mutate(!blockMobileCheckin)}
+              disabled={toggleMobileSetting.isPending}
+              title={blockMobileCheckin ? 'Mobile check-in is BLOCKED — click to allow' : 'Mobile check-in is ALLOWED — click to block'}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                blockMobileCheckin
+                  ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                  : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              <Smartphone size={14} />
+              {blockMobileCheckin ? 'Mobile: Blocked' : 'Mobile: Allowed'}
+              <Toggle size={14} />
+            </button>
+          )}
+
           {/* Quick Check-in / Check-out button for today */}
-          {!todayRecord ? (
+          {blockMobileCheckin && isMobile ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-100 text-red-700">
+              <ShieldOff size={14} /> Desktop Only
+            </span>
+          ) : !todayRecord ? (
             <button
               onClick={() => checkInMutation.mutate()}
               disabled={checkInMutation.isPending}
@@ -225,6 +269,17 @@ export default function Attendance() {
           </button>
         </div>
       </div>
+
+      {/* Mobile blocked warning banner */}
+      {blockMobileCheckin && isMobile && (
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <Smartphone size={18} className="text-red-500 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-red-700">Mobile Check-In Disabled</p>
+            <p className="text-xs text-red-500 mt-0.5">Your admin has restricted attendance marking to desktop computers only. Please use a desktop browser to check in.</p>
+          </div>
+        </div>
+      )}
 
       {/* Admin KPI summary cards */}
       {isAdmin && (

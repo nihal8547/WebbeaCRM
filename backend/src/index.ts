@@ -26,6 +26,7 @@ import attendanceRoutes from './routes/attendance';
 import notificationRoutes from './routes/notifications';
 import activityLogRoutes from './routes/activity-logs';
 import fileRoutes from './routes/files';
+import settingsRoutes from './routes/settings';
 
 const app = express();
 
@@ -90,6 +91,7 @@ app.use('/api/attendance', apiLimiter, attendanceRoutes);
 app.use('/api/notifications', apiLimiter, notificationRoutes);
 app.use('/api/activity-logs', apiLimiter, activityLogRoutes);
 app.use('/api/files', apiLimiter, fileRoutes);
+app.use('/api/settings', apiLimiter, settingsRoutes);
 
 // Serve frontend static build in production (if present)
 if (process.env.NODE_ENV === 'production') {

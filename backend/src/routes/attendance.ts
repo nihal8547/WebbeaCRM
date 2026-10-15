@@ -75,9 +75,22 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+function isMobileUserAgent(ua: string): boolean {
+  return /android|iphone|ipad|ipod|mobile|blackberry|windows phone/i.test(ua);
+}
+
 // POST /checkin - check in for today
 router.post('/checkin', async (req: AuthRequest, res: Response) => {
   try {
+    // Check if mobile check-in is blocked
+    const mobileSetting = await prisma.setting.findUnique({ where: { key: 'blockMobileCheckin' } });
+    if (mobileSetting?.value === 'true') {
+      const ua = req.headers['user-agent'] || '';
+      if (isMobileUserAgent(ua)) {
+        return res.status(403).json({ message: 'Attendance can only be marked from a desktop computer. Mobile check-in is disabled by your admin.' });
+      }
+    }
+
     const userId = req.user!.id;
     const today = todayStart();
     const tomorrow = tomorrowStart();
