@@ -28,24 +28,42 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   res.json(tasks);
 });
 
+function sanitizeTask(body: any) {
+  const d = { ...body };
+  // Convert empty-string integers to null
+  d.groupId      = d.groupId      ? Number(d.groupId)      : null;
+  d.assignedToId = d.assignedToId ? Number(d.assignedToId) : null;
+  // Convert empty-string dates to null
+  d.startDate    = d.startDate    ? new Date(d.startDate)   : null;
+  d.dueDate      = d.dueDate      ? new Date(d.dueDate)     : null;
+  d.completedAt  = d.completedAt  ? new Date(d.completedAt) : undefined;
+  // Remove unexpected fields Prisma doesn't know
+  delete d.assignedTo;
+  delete d.createdBy;
+  delete d.group;
+  delete d.id;
+  delete d.createdAt;
+  delete d.updatedAt;
+  return d;
+}
+
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const data = { ...req.body, createdById: req.user!.id };
-    if (data.dueDate) data.dueDate = new Date(data.dueDate);
+    const data = { ...sanitizeTask(req.body), createdById: req.user!.id };
     const task = await prisma.task.create({
       data,
       include: { assignedTo: { select: { id: true, name: true } }, createdBy: { select: { id: true, name: true } } },
     });
     res.json(task);
-  } catch {
-    res.status(500).json({ message: 'Server error' });
+  } catch (err: any) {
+    console.error('[tasks POST]', err.message);
+    res.status(500).json({ message: err.message || 'Server error' });
   }
 });
 
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const data = { ...req.body };
-    if (data.dueDate) data.dueDate = new Date(data.dueDate);
+    const data = sanitizeTask(req.body);
     if (data.status === 'completed' && !data.completedAt) data.completedAt = new Date();
     const task = await prisma.task.update({
       where: { id: Number(req.params.id) },
@@ -53,8 +71,9 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       include: { assignedTo: { select: { id: true, name: true } }, createdBy: { select: { id: true, name: true } } },
     });
     res.json(task);
-  } catch {
-    res.status(500).json({ message: 'Server error' });
+  } catch (err: any) {
+    console.error('[tasks PUT]', err.message);
+    res.status(500).json({ message: err.message || 'Server error' });
   }
 });
 
