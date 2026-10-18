@@ -18,4 +18,4 @@ RUN mkdir -p /usr/src/app/uploads
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "(npx prisma migrate deploy || npx prisma db push --skip-generate) && (node dist/seed.js || true) && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate && (node dist/seed.js || true) && node dist/index.js"]

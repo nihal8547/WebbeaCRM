@@ -22,6 +22,7 @@ async function main() {
     'files',
     'users',
     'roles',
+    'credentials',
   ];
   const actions = ['view', 'create', 'edit', 'delete'];
 
