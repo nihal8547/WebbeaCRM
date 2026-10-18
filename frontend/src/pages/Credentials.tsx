@@ -4,7 +4,7 @@ import api from '../lib/api';
 import toast from 'react-hot-toast';
 import {
   KeyRound, Plus, Edit, Trash2, Eye, EyeOff, Copy, Search,
-  Building2, Globe, User, Lock, ChevronRight, X, Briefcase,
+  Globe, User, Lock, ChevronRight, Briefcase,
   CheckCircle, Clock, AlertCircle, CreditCard, FileText,
 } from 'lucide-react';
 import SlidePanel from '../components/SlidePanel';

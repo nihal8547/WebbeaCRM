@@ -15,7 +15,8 @@ import {
   UserCheck,
   Smartphone,
   ShieldOff,
-  Toggle,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -231,7 +232,7 @@ export default function Attendance() {
             >
               <Smartphone size={14} />
               {blockMobileCheckin ? 'Mobile: Blocked' : 'Mobile: Allowed'}
-              <Toggle size={14} />
+              {blockMobileCheckin ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
             </button>
           )}
 
