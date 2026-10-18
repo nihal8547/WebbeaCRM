@@ -8,12 +8,9 @@ export default function MobileBlocker({ children }: { children: React.ReactNode 
     const check = () => {
       const ua = navigator.userAgent;
       const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-      const smallScreen = window.innerWidth < 768;
-      setIsMobile(mobile || smallScreen);
+      setIsMobile(mobile);
     };
     check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
   }, []);
 
   if (!isMobile) return <>{children}</>;

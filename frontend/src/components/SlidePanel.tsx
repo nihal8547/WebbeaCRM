@@ -12,9 +12,9 @@ interface SlidePanelProps {
 
 export default function SlidePanel({ open, onClose, title, subtitle, width = 'max-w-2xl', children }: SlidePanelProps) {
   useEffect(() => {
-    if (open) document.body.style.overflow = 'hidden';
-    else document.body.style.overflow = '';
-    return () => { document.body.style.overflow = ''; };
+    if (open) document.documentElement.classList.add('slide-panel-open');
+    else document.documentElement.classList.remove('slide-panel-open');
+    return () => { document.documentElement.classList.remove('slide-panel-open'); };
   }, [open]);
 
   if (!open) return null;

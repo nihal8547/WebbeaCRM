@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -13,11 +13,11 @@ export default function InactivityGuard() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const resetTimer = () => {
+  const resetTimer = useCallback(() => {
     if (showModal) return;
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => setShowModal(true), INACTIVITY_MS);
-  };
+  }, [showModal]);
 
   useEffect(() => {
     const events = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
@@ -28,7 +28,7 @@ export default function InactivityGuard() {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
-  }, [showModal]);
+  }, [resetTimer]);
 
   useEffect(() => {
     if (!showModal) {
