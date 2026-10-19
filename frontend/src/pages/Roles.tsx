@@ -69,6 +69,7 @@ export default function Roles() {
     'files': 'File Attachments',
     'users': 'Users',
     'roles': 'Roles & Permissions',
+    'social-media': 'Social Media Calendar',
   };
 
   const grouped = permissions.reduce((acc: any, p: any) => {

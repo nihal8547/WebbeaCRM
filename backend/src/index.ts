@@ -28,6 +28,7 @@ import activityLogRoutes from './routes/activity-logs';
 import fileRoutes from './routes/files';
 import settingsRoutes from './routes/settings';
 import credentialRoutes from './routes/credentials';
+import socialMediaRoutes from './routes/socialMedia';
 
 const app = express();
 
@@ -94,6 +95,7 @@ app.use('/api/activity-logs', apiLimiter, activityLogRoutes);
 app.use('/api/files', apiLimiter, fileRoutes);
 app.use('/api/settings', apiLimiter, settingsRoutes);
 app.use('/api/credentials', apiLimiter, credentialRoutes);
+app.use('/api/social-media', apiLimiter, socialMediaRoutes);
 
 // Serve frontend static build in production (if present)
 if (process.env.NODE_ENV === 'production') {

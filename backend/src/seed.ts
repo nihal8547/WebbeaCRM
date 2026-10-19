@@ -23,6 +23,7 @@ async function main() {
     'users',
     'roles',
     'credentials',
+    'social-media',
   ];
   const actions = ['view', 'create', 'edit', 'delete'];
 
@@ -73,8 +74,8 @@ async function main() {
 
   // Employee - tasks, works, reports, calendar, attendance, etc.
   const employeePerms = allPerms.filter((p) =>
-    ['tasks', 'task-groups', 'works', 'reports', 'enquiries', 'clients', 'client-works', 'calendar', 'attendance', 'notifications', 'files'].includes(p.module) &&
-    ['view', 'create'].includes(p.action)
+    ['tasks', 'task-groups', 'works', 'reports', 'enquiries', 'clients', 'client-works', 'calendar', 'attendance', 'notifications', 'files', 'social-media'].includes(p.module) &&
+    ['view', 'create', 'edit'].includes(p.action)
   );
   const employeeRole = await prisma.role.upsert({
     where: { name: 'employee' },

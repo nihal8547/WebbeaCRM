@@ -75,6 +75,7 @@ model Client {
   payments    Payment[]
   works       ClientWork[]
   credentials Credential[]
+  socialPosts SocialMediaPost[]
 }
 
 model Credential {
@@ -316,3 +317,24 @@ model Setting {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+model SocialMediaPost {
+  id            Int      @id @default(autoincrement())
+  clientId      Int
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title         String
+  caption       String?
+  scheduledDate DateTime
+  platforms     String   @default("[]") // JSON string array of platforms: ["instagram", "facebook", "linkedin", "twitter", "tiktok", "youtube"]
+  postType      String   @default("post") // "post", "reel", "carousel", "story", "video", "short"
+  status        String   @default("draft") // "draft", "in_review", "approved", "scheduled", "published"
+  mediaUrls     String   @default("[]") // JSON string of media items: [{ url, originalName, fileName, mimeType, size, type: 'image' | 'video' }]
+  hashtags      String?
+  targetUrl     String?
+  notes         String?
+  assignedToId  Int?
+  createdById   Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+

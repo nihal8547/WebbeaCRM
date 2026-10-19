@@ -22,10 +22,37 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
   const tasks = await prisma.task.findMany({
     where,
-    include: { assignedTo: { select: { id: true, name: true } }, createdBy: { select: { id: true, name: true } } },
+    include: {
+      assignedTo: { select: { id: true, name: true } },
+      createdBy: { select: { id: true, name: true } },
+      group: { select: { id: true, name: true } },
+    },
     orderBy: { createdAt: 'desc' },
   });
-  res.json(tasks);
+
+  const taskIds = tasks.map((t) => t.id);
+  const files = await prisma.fileAttachment.findMany({
+    where: {
+      module: 'tasks',
+      entityId: { in: taskIds },
+    },
+    select: {
+      id: true,
+      entityId: true,
+      fileName: true,
+      originalName: true,
+      fileSize: true,
+      mimeType: true,
+      createdAt: true,
+    },
+  });
+
+  const tasksWithFiles = tasks.map((t) => ({
+    ...t,
+    files: files.filter((f) => f.entityId === t.id),
+  }));
+
+  res.json(tasksWithFiles);
 });
 
 function sanitizeTask(body: any) {
@@ -44,6 +71,7 @@ function sanitizeTask(body: any) {
   delete d.id;
   delete d.createdAt;
   delete d.updatedAt;
+  delete d.files;
   return d;
 }
 
