@@ -495,7 +495,7 @@ export default function Credentials() {
           <div>
             <label className="form-label">Password *</label>
             <input className="form-input" type="text" placeholder="password" value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })} required autoComplete="new-password" />
+              onChange={(e) => setForm({ ...form, password: e.target.value })} required autoComplete="off" />
           </div>
           <div>
             <label className="form-label">Notes</label>

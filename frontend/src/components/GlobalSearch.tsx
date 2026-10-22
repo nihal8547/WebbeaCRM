@@ -108,9 +108,9 @@ export default function GlobalSearch({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/40 backdrop-blur-xs" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-gray-200"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-gray-200 relative z-10"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Input */}

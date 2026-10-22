@@ -13,9 +13,17 @@ body {
   background: #f1f5f9;
 }
 
-/* Prevent background scroll when SlidePanel is open — avoids Mac Safari input freeze */
-html.slide-panel-open {
-  overflow: hidden;
+/* Ensure inputs, textareas and selects allow text selection and typing on Mac OS Safari & iOS */
+input, textarea, select, [contenteditable="true"] {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  touch-action: manipulation;
+  pointer-events: auto !important;
+}
+
+/* Smooth touch scrolling on mobile */
+html, body {
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Sidebar scrollbar — thin, dark-themed */

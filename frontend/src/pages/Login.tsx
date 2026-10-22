@@ -74,7 +74,7 @@ export default function Login() {
       </div>
 
       {/* Right side – login form */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 p-8">
+      <div className="flex-1 flex items-center justify-center bg-slate-50 p-4 sm:p-8">
         <div className="w-full max-w-md">
           {/* Mobile brand header */}
           <div className="flex items-center gap-3 mb-8 lg:hidden">

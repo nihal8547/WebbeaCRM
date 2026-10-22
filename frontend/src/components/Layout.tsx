@@ -76,9 +76,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout, can } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : true));
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Tasks', 'Admin']);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setSidebarOpen(false);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -104,22 +110,38 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
+      {/* Mobile Backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden transition-opacity"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside
-        className="flex flex-col transition-all duration-300"
+        className={`flex flex-col transition-all duration-300 z-50 fixed inset-y-0 left-0 lg:static lg:z-auto ${
+          sidebarOpen ? 'w-60 min-w-[15rem] shadow-2xl lg:shadow-none' : 'w-0 min-w-0 pointer-events-none lg:pointer-events-auto'
+        }`}
         style={{
-          width: sidebarOpen ? 240 : 0,
-          minWidth: sidebarOpen ? 240 : 0,
           background: '#1e293b',
           overflow: 'hidden',
         }}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
-          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-            <FolderKanban size={18} color="white" />
+        <div className="flex items-center justify-between px-5 py-5 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+              <FolderKanban size={18} color="white" />
+            </div>
+            <span className="text-white font-bold text-lg whitespace-nowrap">WebbeaCRM</span>
           </div>
-          <span className="text-white font-bold text-lg whitespace-nowrap">WebbeaCRM</span>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden text-slate-400 hover:text-white p-1 rounded-lg"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Nav */}
@@ -218,10 +240,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4 flex-shrink-0">
+        <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-2.5 sm:py-3 flex items-center gap-3 sm:gap-4 flex-shrink-0">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100"
+            aria-label="Toggle Sidebar"
           >
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
@@ -253,7 +276,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           {children}
         </main>
       </div>
