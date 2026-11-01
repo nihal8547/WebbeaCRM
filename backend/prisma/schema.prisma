@@ -79,16 +79,21 @@ model Client {
 }
 
 model Credential {
-  id        Int      @id @default(autoincrement())
-  clientId  Int
-  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  label     String
-  url       String?
-  username  String
-  password  String
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          Int       @id @default(autoincrement())
+  clientId    Int
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  label       String
+  platform    String    @default("instagram") // "instagram", "facebook", "linkedin", "tiktok", "twitter", "other"
+  url         String?
+  username    String
+  password    String
+  sessionData String?   // Encrypted session cookies/tokens
+  status      String    @default("connected") // "connected", "checkpoint_required", "expired", "error"
+  lastChecked DateTime?
+  avatarUrl   String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 // Client Work - tracks multiple works/projects per client with durations
@@ -319,22 +324,27 @@ model Setting {
 }
 
 model SocialMediaPost {
-  id            Int      @id @default(autoincrement())
-  clientId      Int
-  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  title         String
-  caption       String?
-  scheduledDate DateTime
-  platforms     String   @default("[]") // JSON string array of platforms: ["instagram", "facebook", "linkedin", "twitter", "tiktok", "youtube"]
-  postType      String   @default("post") // "post", "reel", "carousel", "story", "video", "short"
-  status        String   @default("draft") // "draft", "in_review", "approved", "scheduled", "published"
-  mediaUrls     String   @default("[]") // JSON string of media items: [{ url, originalName, fileName, mimeType, size, type: 'image' | 'video' }]
-  hashtags      String?
-  targetUrl     String?
-  notes         String?
-  assignedToId  Int?
-  createdById   Int?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id               Int       @id @default(autoincrement())
+  clientId         Int
+  client           Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title            String
+  caption          String?
+  scheduledDate    DateTime
+  platforms        String    @default("[]") // JSON string array of platforms: ["instagram", "facebook", "linkedin", "twitter", "tiktok", "youtube"]
+  targetAccountIds String    @default("[]") // JSON string array of Credential IDs: [1, 2]
+  postType         String    @default("post") // "post", "reel", "carousel", "story", "video", "short"
+  status           String    @default("draft") // "draft", "in_review", "approved", "scheduled", "published"
+  autoPublish      Boolean   @default(true)
+  publishStatus    String    @default("pending") // "pending", "processing", "success", "partial_failure", "failed"
+  publishedAt      DateTime?
+  publishLogs      String?   @default("[]") // JSON string array of logs: [{ accountId, handle, platform, status, liveUrl, error, timestamp }]
+  mediaUrls        String    @default("[]") // JSON string of media items: [{ url, originalName, fileName, mimeType, size, type: 'image' | 'video' }]
+  hashtags         String?
+  targetUrl        String?
+  notes            String?
+  assignedToId     Int?
+  createdById      Int?
+  retryCount       Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
-

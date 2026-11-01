@@ -11,7 +11,8 @@ import {
   X, Check, Copy, ExternalLink, Image as ImageIcon, Video as VideoIcon,
   Play, Search, Building2, Phone, Mail, MapPin, Clock, Share2,
   SlidersHorizontal, Film, Eye, Sparkles, Download, Layers,
-  Link as LinkIcon, MoveLeft, MoveRight, Maximize2, Upload
+  Link as LinkIcon, MoveLeft, MoveRight, Maximize2, Upload,
+  Send, RefreshCw, KeyRound, AlertTriangle
 } from 'lucide-react';
 
 export interface MediaItem {
@@ -34,6 +35,31 @@ interface Client {
   notes?: string;
 }
 
+export interface PublishLog {
+  credentialId: number;
+  platform: string;
+  username?: string;
+  status: 'success' | 'failed';
+  postUrl?: string;
+  postId?: string;
+  error?: string;
+  timestamp: string;
+}
+
+export interface ClientCredential {
+  id: number;
+  clientId: number;
+  label: string;
+  platform?: string;
+  url?: string;
+  username: string;
+  status?: string;
+  lastChecked?: string;
+  avatarUrl?: string;
+  notes?: string;
+  client?: { id: number; name: string; company?: string };
+}
+
 interface SocialPost {
   id: number;
   clientId: number;
@@ -48,6 +74,12 @@ interface SocialPost {
   hashtags?: string;
   targetUrl?: string;
   notes?: string;
+  targetAccountIds?: number[];
+  autoPublish?: boolean;
+  publishStatus?: 'pending' | 'published' | 'failed' | 'partially_published';
+  publishedAt?: string;
+  publishLogs?: PublishLog[];
+  retryCount?: number;
   createdAt?: string;
 }
 
@@ -109,6 +141,8 @@ const defaultForm: {
   scheduledDate: string;
   scheduledTime: string;
   platforms: string[];
+  targetAccountIds: number[];
+  autoPublish: boolean;
   postType: string;
   status: string;
   mediaUrls: MediaItem[];
@@ -122,6 +156,8 @@ const defaultForm: {
   scheduledDate: format(new Date(), 'yyyy-MM-dd'),
   scheduledTime: '10:00',
   platforms: ['instagram', 'facebook'],
+  targetAccountIds: [],
+  autoPublish: true,
   postType: 'post',
   status: 'draft',
   mediaUrls: [],
@@ -178,6 +214,11 @@ export default function SocialMediaCalendar() {
     queryFn: () => api.get('/clients').then((r) => r.data),
   });
 
+  const { data: credentials = [] } = useQuery<ClientCredential[]>({
+    queryKey: ['credentials'],
+    queryFn: () => api.get('/credentials').then((r) => r.data),
+  });
+
   const { data: posts = [], isLoading } = useQuery<SocialPost[]>({
     queryKey: ['social-posts', selectedClientFilter, selectedPlatformFilter, selectedStatusFilter],
     queryFn: () => {
@@ -194,6 +235,19 @@ export default function SocialMediaCalendar() {
     : null;
 
   // Mutations
+  const publishNowMutation = useMutation({
+    mutationFn: (id: number) => api.post(`/social-media/${id}/publish-now`),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['social-posts'] });
+      toast.success(res.data?.message || 'Published to target accounts!', { icon: '🚀' });
+      if (res.data?.post) {
+        setActivePostDetails(res.data.post);
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || 'Failed to auto-publish post');
+    },
+  });
   const savePostMutation = useMutation({
     mutationFn: (data: any) => {
       const fullDate = `${data.scheduledDate}T${data.scheduledTime || '10:00'}:00`;
@@ -371,9 +425,15 @@ export default function SocialMediaCalendar() {
   const openNewPostModal = (dateStr?: string) => {
     setEditingPost(null);
     setUploadOptionTab('images');
+    const chosenClientId = selectedClientFilter !== 'all' ? Number(selectedClientFilter) : (clients[0]?.id || '');
+    const clientCreds = credentials.filter((c) => c.clientId === Number(chosenClientId));
     setForm({
       ...defaultForm,
-      clientId: selectedClientFilter !== 'all' ? Number(selectedClientFilter) : (clients[0]?.id || ''),
+      clientId: chosenClientId,
+      targetAccountIds: clientCreds.map((c) => c.id),
+      platforms: clientCreds.length > 0
+        ? Array.from(new Set(clientCreds.map((c) => (c.platform || 'instagram').toLowerCase()).filter(Boolean)))
+        : ['instagram', 'facebook'],
       scheduledDate: dateStr || format(new Date(), 'yyyy-MM-dd'),
     });
     setIsFormOpen(true);
@@ -390,6 +450,8 @@ export default function SocialMediaCalendar() {
       scheduledDate: format(dateObj, 'yyyy-MM-dd'),
       scheduledTime: format(dateObj, 'HH:mm'),
       platforms: post.platforms || [],
+      targetAccountIds: post.targetAccountIds || [],
+      autoPublish: post.autoPublish !== false,
       postType: post.postType || 'post',
       status: post.status || 'draft',
       mediaUrls: post.mediaUrls || [],
@@ -398,6 +460,41 @@ export default function SocialMediaCalendar() {
       notes: post.notes || '',
     });
     setIsFormOpen(true);
+  };
+
+  const toggleTargetAccount = (credId: number) => {
+    setForm((prev) => {
+      const exists = prev.targetAccountIds.includes(credId);
+      const newTargetIds = exists
+        ? prev.targetAccountIds.filter((id) => id !== credId)
+        : [...prev.targetAccountIds, credId];
+
+      const selectedCreds = credentials.filter((c) => newTargetIds.includes(c.id));
+      const newPlatforms = Array.from(new Set(selectedCreds.map((c) => (c.platform || 'instagram').toLowerCase()).filter(Boolean)));
+
+      return {
+        ...prev,
+        targetAccountIds: newTargetIds,
+        platforms: newPlatforms.length > 0 ? newPlatforms : prev.platforms,
+      };
+    });
+  };
+
+  const selectAllTargetAccounts = (clientCreds: ClientCredential[]) => {
+    const credIds = clientCreds.map((c) => c.id);
+    const plats = Array.from(new Set(clientCreds.map((c) => (c.platform || 'instagram').toLowerCase()).filter(Boolean)));
+    setForm((prev) => ({
+      ...prev,
+      targetAccountIds: credIds,
+      platforms: plats.length > 0 ? plats : prev.platforms,
+    }));
+  };
+
+  const clearTargetAccounts = () => {
+    setForm((prev) => ({
+      ...prev,
+      targetAccountIds: [],
+    }));
   };
 
   const togglePlatform = (platId: string) => {
@@ -816,9 +913,23 @@ export default function SocialMediaCalendar() {
                               })}
                             </div>
 
-                            <span className="text-[10px] text-gray-500 font-medium">
-                              {format(new Date(post.scheduledDate), 'HH:mm')}
-                            </span>
+                            <div className="flex items-center gap-1">
+                              {post.autoPublish && (
+                                <span
+                                  title={post.publishStatus === 'published' ? 'Auto-Published' : 'Auto-Publish Scheduled'}
+                                  className={`inline-flex items-center px-1 rounded text-[8px] font-bold ${
+                                    post.publishStatus === 'published'
+                                      ? 'bg-emerald-100 text-emerald-700'
+                                      : 'bg-indigo-100 text-indigo-700'
+                                  }`}
+                                >
+                                  {post.publishStatus === 'published' ? '✓ Live' : '⚡ Auto'}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-gray-500 font-medium">
+                                {format(new Date(post.scheduledDate), 'HH:mm')}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Media Thumbnail snippet with Video/Image tags */}
@@ -998,6 +1109,20 @@ export default function SocialMediaCalendar() {
                           )}
                           {post.postType}
                         </span>
+                        {post.autoPublish && (
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
+                              post.publishStatus === 'published'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : post.publishStatus === 'failed'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                : 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                            }`}
+                          >
+                            <Send size={10} />
+                            {post.publishStatus === 'published' ? 'Live Auto' : 'Auto-Publish'}
+                          </span>
+                        )}
                       </div>
 
                       {/* Caption excerpt */}
@@ -1170,25 +1295,157 @@ export default function SocialMediaCalendar() {
                 </div>
               </div>
 
-              {/* Platforms */}
+              {/* Auto-Publish Status Banner & Live Publication Logs */}
+              {activePostDetails.autoPublish && (
+                <div className="p-4 rounded-xl border bg-slate-50 border-slate-200 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 ${
+                        activePostDetails.publishStatus === 'published'
+                          ? 'bg-emerald-600 shadow-xs'
+                          : activePostDetails.publishStatus === 'failed'
+                          ? 'bg-rose-600 shadow-xs'
+                          : 'bg-indigo-600 shadow-xs'
+                      }`}>
+                        <Send size={16} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-gray-900">Auto-Publish Engine:</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                            activePostDetails.publishStatus === 'published'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : activePostDetails.publishStatus === 'failed'
+                              ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                              : 'bg-indigo-100 text-indigo-800 border border-indigo-300'
+                          }`}>
+                            {activePostDetails.publishStatus || 'Pending'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          {activePostDetails.publishedAt
+                            ? `Published on ${format(new Date(activePostDetails.publishedAt), 'dd MMM yyyy, HH:mm')}`
+                            : `Scheduled to auto-publish on ${format(new Date(activePostDetails.scheduledDate), 'dd MMM yyyy, HH:mm')}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {activePostDetails.publishStatus !== 'published' && (
+                      <button
+                        type="button"
+                        onClick={() => publishNowMutation.mutate(activePostDetails.id)}
+                        disabled={publishNowMutation.isPending}
+                        className="btn-primary text-xs flex items-center gap-1.5 py-1.5 px-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-xs shrink-0 self-start sm:self-auto"
+                      >
+                        {publishNowMutation.isPending ? (
+                          <RefreshCw size={13} className="animate-spin" />
+                        ) : (
+                          <Send size={13} />
+                        )}
+                        <span>{publishNowMutation.isPending ? 'Publishing...' : 'Publish Now'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Live Publication Logs (Links to Instagram / Facebook posts) */}
+                  {activePostDetails.publishLogs && activePostDetails.publishLogs.length > 0 && (
+                    <div className="space-y-1.5 pt-2 border-t border-slate-200">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                        Live Publication Results
+                      </span>
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {activePostDetails.publishLogs.map((log: any, idx: number) => (
+                          <div
+                            key={idx}
+                            className="p-2.5 rounded-lg bg-white border border-gray-200 flex items-center justify-between text-xs"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${log.status === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                              <span className="font-semibold text-gray-800 uppercase text-[11px]">{log.platform}</span>
+                              {log.username && <span className="text-gray-500 font-mono text-[11px] truncate">@{log.username}</span>}
+                            </div>
+                            <div className="shrink-0 pl-2">
+                              {log.postUrl ? (
+                                <a
+                                  href={log.postUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 hover:underline font-bold flex items-center gap-1 text-[11px]"
+                                >
+                                  View Live Post <ExternalLink size={11} />
+                                </a>
+                              ) : log.error ? (
+                                <span className="text-rose-600 text-[11px] font-medium">{log.error}</span>
+                              ) : (
+                                <span className="text-emerald-600 text-[11px] font-medium">Published</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Target Accounts & Platforms */}
               <div>
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">
-                  Target Platforms
+                  Target Accounts & Platforms
                 </span>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {activePostDetails.platforms?.map((platId) => {
-                    const pCfg = AVAILABLE_PLATFORMS.find((p) => p.id === platId);
-                    return pCfg ? (
-                      <div
-                        key={platId}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs ${pCfg.color}`}
-                      >
-                        <span>{pCfg.icon}</span>
-                        <span>{pCfg.name}</span>
+                {(() => {
+                  const targetCreds = credentials.filter((c) => activePostDetails.targetAccountIds?.includes(c.id));
+                  return (
+                    <div className="space-y-2">
+                      {targetCreds.length > 0 && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {targetCreds.map((cred) => {
+                            const pCfg = AVAILABLE_PLATFORMS.find((p) => p.id === (cred.platform || 'instagram').toLowerCase());
+                            return (
+                              <div
+                                key={cred.id}
+                                className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/50 flex items-center justify-between"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center text-xs shrink-0">
+                                    {pCfg?.icon || '🌐'}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-bold text-gray-900 truncate">{cred.label}</span>
+                                      <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-gray-100 text-gray-600 uppercase">
+                                        {cred.platform || 'Social'}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-gray-500 font-mono truncate mt-0.5">@{cred.username}</p>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md shrink-0">
+                                  Target
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 flex-wrap pt-1">
+                        {activePostDetails.platforms?.map((platId) => {
+                          const pCfg = AVAILABLE_PLATFORMS.find((p) => p.id === platId);
+                          return pCfg ? (
+                            <div
+                              key={platId}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs ${pCfg.color}`}
+                            >
+                              <span>{pCfg.icon}</span>
+                              <span>{pCfg.name}</span>
+                            </div>
+                          ) : null;
+                        })}
                       </div>
-                    ) : null;
-                  })}
-                </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Media Gallery / Player (Images & Videos) */}
@@ -1368,6 +1625,16 @@ export default function SocialMediaCalendar() {
               </button>
 
               <div className="flex items-center gap-2">
+                {activePostDetails.publishStatus !== 'published' && (
+                  <button
+                    onClick={() => publishNowMutation.mutate(activePostDetails.id)}
+                    disabled={publishNowMutation.isPending}
+                    className="btn-primary text-xs flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-xs"
+                  >
+                    {publishNowMutation.isPending ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
+                    {publishNowMutation.isPending ? 'Publishing...' : 'Publish Now'}
+                  </button>
+                )}
                 <button
                   onClick={() => openEditModal(activePostDetails)}
                   className="btn-secondary text-xs flex items-center gap-1.5"
@@ -1552,7 +1819,18 @@ export default function SocialMediaCalendar() {
                 </label>
                 <select
                   value={form.clientId}
-                  onChange={(e) => setForm({ ...form, clientId: Number(e.target.value) })}
+                  onChange={(e) => {
+                    const cid = e.target.value ? Number(e.target.value) : '';
+                    const clientCreds = credentials.filter((c) => c.clientId === Number(cid));
+                    setForm((prev) => ({
+                      ...prev,
+                      clientId: cid,
+                      targetAccountIds: clientCreds.map((c) => c.id),
+                      platforms: clientCreds.length > 0
+                        ? Array.from(new Set(clientCreds.map((c) => (c.platform || 'instagram').toLowerCase()).filter(Boolean)))
+                        : prev.platforms,
+                    }));
+                  }}
                   className="form-input"
                   required
                 >
@@ -1629,35 +1907,170 @@ export default function SocialMediaCalendar() {
                 </div>
               </div>
 
-              {/* Target Platforms */}
-              <div>
-                <label className="form-label font-semibold text-gray-900 block mb-1.5">
-                  Target Platforms
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {AVAILABLE_PLATFORMS.map((plat) => {
-                    const isSelected = form.platforms.includes(plat.id);
-                    return (
-                      <button
-                        type="button"
-                        key={plat.id}
-                        onClick={() => togglePlatform(plat.id)}
-                        className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between border transition-all ${
-                          isSelected
-                            ? 'border-blue-500 bg-blue-50 text-blue-900 shadow-xs'
-                            : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        <span className="flex items-center gap-1.5">
-                          <span>{plat.icon}</span>
-                          <span>{plat.name}</span>
-                        </span>
-                        {isSelected && <Check size={14} className="text-blue-600" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              {/* Target Client Social Accounts & Auto-Publish */}
+              {(() => {
+                const currentClientCreds = form.clientId ? credentials.filter((c) => c.clientId === Number(form.clientId)) : [];
+                return (
+                  <div className="space-y-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="form-label font-bold text-gray-900 mb-0 flex items-center gap-1.5">
+                          <KeyRound size={15} className="text-blue-600" /> Target Accounts ({currentClientCreds.length} connected)
+                        </label>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          Choose which connected client profiles or branches will receive this publication
+                        </p>
+                      </div>
+                      {currentClientCreds.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => selectAllTargetAccounts(currentClientCreds)}
+                            className="text-[11px] text-blue-600 font-semibold hover:underline"
+                          >
+                            Select All
+                          </button>
+                          <span className="text-gray-300">|</span>
+                          <button
+                            type="button"
+                            onClick={clearTargetAccounts}
+                            className="text-[11px] text-gray-500 font-medium hover:underline"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {currentClientCreds.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {currentClientCreds.map((cred) => {
+                          const isSelected = form.targetAccountIds.includes(cred.id);
+                          const pCfg = AVAILABLE_PLATFORMS.find((p) => p.id === (cred.platform || 'instagram').toLowerCase());
+                          return (
+                            <div
+                              key={cred.id}
+                              onClick={() => toggleTargetAccount(cred.id)}
+                              className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                                isSelected
+                                  ? 'border-blue-500 bg-blue-50/80 shadow-xs ring-1 ring-blue-300'
+                                  : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                                  {pCfg?.icon || '🌐'}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-bold text-gray-900 truncate">
+                                      {cred.label}
+                                    </span>
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded-full font-semibold bg-gray-100 text-gray-600 uppercase">
+                                      {cred.platform || 'Social'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-[11px] text-gray-500 mt-0.5">
+                                    <span className="font-mono truncate">@{cred.username}</span>
+                                    <span className={`inline-block w-1.5 h-1.5 rounded-full ${cred.status === 'connected' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="pl-2 shrink-0">
+                                <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-colors ${
+                                  isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 bg-white'
+                                }`}>
+                                  {isSelected && <Check size={13} strokeWidth={3} />}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+                          <div>
+                            <p className="font-bold">No connected accounts for this client</p>
+                            <p className="text-[11px] text-amber-700">Add client credentials in Credentials Vault to enable automatic publishing.</p>
+                          </div>
+                        </div>
+                        <a
+                          href="/credentials"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-[11px] flex items-center gap-1 self-start sm:self-auto shrink-0 transition-colors shadow-2xs"
+                        >
+                          <Plus size={12} /> Connect Account <ExternalLink size={11} />
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Auto-Publish Toggle switch */}
+                    <div className="mt-2 p-3 bg-white rounded-xl border border-gray-200 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0 ${form.autoPublish ? 'bg-indigo-600' : 'bg-gray-400'}`}>
+                          <Send size={15} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                            Auto-Publish to Selected Accounts
+                            {form.autoPublish && (
+                              <span className="text-[10px] bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.2 rounded-full border border-indigo-200">
+                                Active
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[11px] text-gray-500 mt-0.5">
+                            {form.autoPublish
+                              ? `Background worker will automatically publish content to ${form.targetAccountIds.length} target account(s) at scheduled time.`
+                              : 'Post will be saved for manual publishing only.'}
+                          </p>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={form.autoPublish}
+                          onChange={(e) => setForm({ ...form, autoPublish: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </label>
+                    </div>
+
+                    {/* Fallback / Additional Platforms Selector */}
+                    <div className="pt-1">
+                      <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">
+                        Platforms Tagging
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {AVAILABLE_PLATFORMS.map((plat) => {
+                          const isSelected = form.platforms.includes(plat.id);
+                          return (
+                            <button
+                              type="button"
+                              key={plat.id}
+                              onClick={() => togglePlatform(plat.id)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-all ${
+                                isSelected
+                                  ? 'border-blue-500 bg-blue-50 text-blue-900 shadow-2xs font-bold'
+                                  : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100'
+                              }`}
+                            >
+                              <span>{plat.icon}</span>
+                              <span>{plat.name}</span>
+                              {isSelected && <Check size={12} className="text-blue-600 ml-0.5" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Post Type & Status */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

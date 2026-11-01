@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   KeyRound, Plus, Edit, Trash2, Eye, EyeOff, Copy, Search,
   Globe, User, Lock, ChevronRight, Briefcase,
-  CheckCircle, Clock, AlertCircle, CreditCard, FileText,
+  CreditCard, FileText, RefreshCw,
 } from 'lucide-react';
 import SlidePanel from '../components/SlidePanel';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,20 +33,68 @@ interface Quotation {
   id: number; title: string; total: number; status: string; createdAt: string;
 }
 
-interface Credential {
-  id: number; clientId: number; label: string; url?: string;
-  username: string; password: string; notes?: string;
+export interface Credential {
+  id: number;
+  clientId: number;
+  label: string;
+  platform?: string;
+  url?: string;
+  username: string;
+  password: string;
+  status?: string;
+  lastChecked?: string;
+  avatarUrl?: string;
+  notes?: string;
   client?: { id: number; name: string; company?: string };
 }
 
-const emptyForm = { clientId: '', label: '', url: '', username: '', password: '', notes: '' };
+const PLATFORM_CONFIG: Record<string, { label: string; icon: string; color: string; defaultUrl: (u: string) => string }> = {
+  instagram: {
+    label: 'Instagram',
+    icon: '📸',
+    color: 'bg-gradient-to-tr from-amber-500 via-pink-600 to-purple-600 text-white',
+    defaultUrl: (u) => `https://instagram.com/${u.replace(/^@/, '')}`,
+  },
+  facebook: {
+    label: 'Facebook',
+    icon: '👥',
+    color: 'bg-blue-600 text-white',
+    defaultUrl: (u) => `https://facebook.com/${u}`,
+  },
+  linkedin: {
+    label: 'LinkedIn',
+    icon: '💼',
+    color: 'bg-sky-700 text-white',
+    defaultUrl: (u) => `https://linkedin.com/company/${u}`,
+  },
+  tiktok: {
+    label: 'TikTok',
+    icon: '🎵',
+    color: 'bg-neutral-900 text-cyan-400',
+    defaultUrl: (u) => `https://tiktok.com/@${u.replace(/^@/, '')}`,
+  },
+  twitter: {
+    label: 'X / Twitter',
+    icon: '𝕏',
+    color: 'bg-black text-white',
+    defaultUrl: (u) => `https://x.com/${u.replace(/^@/, '')}`,
+  },
+  other: {
+    label: 'Website / Other',
+    icon: '🌐',
+    color: 'bg-slate-700 text-white',
+    defaultUrl: () => '',
+  },
+};
 
-const workStatusColor: Record<string, string> = {
-  pending: 'bg-gray-100 text-gray-600',
-  in_progress: 'bg-blue-100 text-blue-700',
-  completed: 'bg-green-100 text-green-700',
-  on_hold: 'bg-orange-100 text-orange-700',
-  cancelled: 'bg-red-100 text-red-700',
+const emptyForm = {
+  clientId: '',
+  label: '',
+  platform: 'instagram',
+  url: '',
+  username: '',
+  password: '',
+  notes: '',
 };
 
 export default function Credentials() {
@@ -61,6 +109,7 @@ export default function Credentials() {
   const [editingCred, setEditingCred] = useState<Credential | null>(null);
   const [form, setForm] = useState<typeof emptyForm>({ ...emptyForm });
   const [revealedIds, setRevealedIds] = useState<Set<number>>(new Set());
+  const [testingId, setTestingId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'credentials' | 'works' | 'payments' | 'quotations'>('credentials');
 
   const { data: clients = [], isLoading } = useQuery<Client[]>({
@@ -85,28 +134,40 @@ export default function Credentials() {
       editingCred ? api.put(`/credentials/${editingCred.id}`, data) : api.post('/credentials', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['credentials', selectedClient?.id] });
-      toast.success(editingCred ? 'Credential updated' : 'Credential added');
+      toast.success(editingCred ? 'Account updated' : 'Account connected successfully');
       setCredPanel(false);
       setEditingCred(null);
       setForm({ ...emptyForm });
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save'),
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save account'),
   });
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/credentials/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['credentials', selectedClient?.id] });
-      toast.success('Credential deleted');
+      toast.success('Account deleted');
     },
-    onError: () => toast.error('Failed to delete'),
+    onError: () => toast.error('Failed to delete account'),
   });
 
-  const openClient = (c: Client) => {
-    setSelectedClient(c);
+  const testConnection = async (id: number) => {
+    try {
+      setTestingId(id);
+      const res = await api.post(`/credentials/${id}/test-connection`);
+      toast.success(res.data.message || 'Connection verified and active!');
+      qc.invalidateQueries({ queryKey: ['credentials', selectedClient?.id] });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Connection test failed');
+    } finally {
+      setTestingId(null);
+    }
+  };
+
+  const openClient = (client: Client) => {
+    setSelectedClient(client);
     setDetailPanel(true);
     setActiveTab('credentials');
-    setRevealedIds(new Set());
   };
 
   const openAddCred = () => {
@@ -117,7 +178,15 @@ export default function Credentials() {
 
   const openEditCred = (c: Credential) => {
     setEditingCred(c);
-    setForm({ clientId: String(c.clientId), label: c.label, url: c.url || '', username: c.username, password: c.password, notes: c.notes || '' });
+    setForm({
+      clientId: String(c.clientId),
+      label: c.label,
+      platform: c.platform || 'instagram',
+      url: c.url || '',
+      username: c.username,
+      password: c.password,
+      notes: c.notes || '',
+    });
     setCredPanel(true);
   };
 
@@ -148,9 +217,9 @@ export default function Credentials() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <KeyRound size={24} className="text-indigo-600" /> Client Credentials
+            <KeyRound size={24} className="text-indigo-600" /> Client Social Accounts & Credentials
           </h1>
-          <p className="text-gray-500 text-sm">Securely store login credentials and view full client details</p>
+          <p className="text-gray-500 text-sm">Securely store social media accounts (Instagram, Facebook, LinkedIn) and credentials per client</p>
         </div>
       </div>
 
@@ -200,7 +269,7 @@ export default function Credentials() {
                       onClick={(e) => { e.stopPropagation(); openClient(c); }}
                       className="flex items-center gap-1 text-indigo-600 hover:text-indigo-800 text-xs font-medium"
                     >
-                      View Details <ChevronRight size={14} />
+                      View Accounts <ChevronRight size={14} />
                     </button>
                   </td>
                 </tr>
@@ -220,23 +289,18 @@ export default function Credentials() {
       >
         <div className="flex flex-col h-full">
           {/* Tabs */}
-          <div className="flex border-b border-gray-200 px-6 pt-4 gap-1 shrink-0">
-            {([
-              { key: 'credentials', label: 'Credentials', icon: KeyRound },
-              { key: 'works', label: 'Works', icon: Briefcase },
-              { key: 'payments', label: 'Payments', icon: CreditCard },
-              { key: 'quotations', label: 'Quotations', icon: FileText },
-            ] as const).map(({ key, label, icon: Icon }) => (
+          <div className="flex border-b border-gray-200 px-6 pt-3 gap-2 bg-gray-50">
+            {(['credentials', 'works', 'payments', 'quotations'] as const).map((key) => (
               <button
                 key={key}
                 onClick={() => setActiveTab(key)}
-                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors -mb-px ${
+                className={`pb-3 px-3 text-xs font-semibold capitalize border-b-2 transition-all ${
                   activeTab === key
-                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50'
+                    ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                <Icon size={14} /> {label}
+                {key === 'credentials' ? 'Social Accounts & Credentials' : key}
                 {key === 'credentials' && credentials.length > 0 && (
                   <span className="ml-1 bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">{credentials.length}</span>
                 )}
@@ -252,78 +316,114 @@ export default function Credentials() {
             {activeTab === 'credentials' && (
               <>
                 {isAdmin && (
-                  <div className="flex justify-end">
-                    <button onClick={openAddCred} className="btn-primary flex items-center gap-2 text-sm">
-                      <Plus size={15} /> Add Credential
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500 font-medium">
+                      Manage multiple social accounts (Instagram, Facebook, LinkedIn) for this client
+                    </span>
+                    <button onClick={openAddCred} className="btn-primary flex items-center gap-2 text-sm shadow-xs">
+                      <Plus size={15} /> Add Social Account
                     </button>
                   </div>
                 )}
                 {credentials.length === 0 ? (
-                  <div className="text-center py-10 text-gray-400">
+                  <div className="text-center py-10 text-gray-400 card border-dashed">
                     <KeyRound size={32} className="mx-auto mb-2 text-gray-300" />
-                    <p>No credentials stored yet</p>
+                    <p className="font-semibold text-gray-700">No social accounts connected yet</p>
+                    <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
+                      Connect client's Instagram, Facebook, or LinkedIn using Username and Password to enable Auto-Publishing.
+                    </p>
+                    {isAdmin && (
+                      <button onClick={openAddCred} className="btn-primary text-xs mt-3 inline-flex items-center gap-1.5">
+                        <Plus size={13} /> Connect First Account
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {credentials.map((cred) => (
-                      <div key={cred.id} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
-                              <KeyRound size={14} className="text-indigo-600" />
+                    {credentials.map((cred) => {
+                      const pCfg = PLATFORM_CONFIG[cred.platform || 'instagram'] || PLATFORM_CONFIG.other;
+                      return (
+                        <div key={cred.id} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3 shadow-xs hover:border-indigo-300 transition-all">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-xs ${pCfg.color}`}>
+                                {pCfg.icon}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-bold text-gray-900 text-sm">{cred.label}</p>
+                                  <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    Connected
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-xs font-mono font-medium text-gray-600">
+                                    @{cred.username.replace(/^@/, '')}
+                                  </span>
+                                  {cred.url && (
+                                    <a href={cred.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline flex items-center gap-0.5">
+                                      <Globe size={10} /> Profile
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-semibold text-gray-900 text-sm">{cred.label}</p>
-                              {cred.url && (
-                                <a href={cred.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline flex items-center gap-1">
-                                  <Globe size={10} /> {cred.url}
-                                </a>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => testConnection(cred.id)}
+                                disabled={testingId === cred.id}
+                                className="btn-secondary text-xs py-1 px-2.5 flex items-center gap-1"
+                                title="Test connection status"
+                              >
+                                <RefreshCw size={12} className={testingId === cred.id ? 'animate-spin text-indigo-600' : ''} />
+                                {testingId === cred.id ? 'Testing...' : 'Verify'}
+                              </button>
+                              {isAdmin && (
+                                <>
+                                  <button onClick={() => openEditCred(cred)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit size={14} /></button>
+                                  <button onClick={() => { if (window.confirm('Delete this social account?')) del.mutate(cred.id); }} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={14} /></button>
+                                </>
                               )}
                             </div>
                           </div>
-                          {isAdmin && (
-                            <div className="flex gap-2">
-                              <button onClick={() => openEditCred(cred)} className="text-blue-600 hover:text-blue-800"><Edit size={14} /></button>
-                              <button onClick={() => del.mutate(cred.id)} className="text-red-500 hover:text-red-700"><Trash2 size={14} /></button>
-                            </div>
-                          )}
-                        </div>
 
-                        <div className="grid grid-cols-1 gap-2">
-                          {/* Username */}
-                          <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                            <div className="flex items-center gap-2 text-sm text-gray-700 min-w-0">
-                              <User size={13} className="text-gray-400 shrink-0" />
-                              <span className="text-xs text-gray-400 shrink-0">Username:</span>
-                              <span className="font-mono truncate">{cred.username}</span>
-                            </div>
-                            <button onClick={() => copyToClipboard(cred.username, 'Username')} className="text-gray-400 hover:text-indigo-600 ml-2 shrink-0">
-                              <Copy size={13} />
-                            </button>
-                          </div>
-                          {/* Password */}
-                          <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                            <div className="flex items-center gap-2 text-sm text-gray-700 min-w-0">
-                              <Lock size={13} className="text-gray-400 shrink-0" />
-                              <span className="text-xs text-gray-400 shrink-0">Password:</span>
-                              <span className="font-mono truncate">
-                                {revealedIds.has(cred.id) ? cred.password : '••••••••'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5 ml-2 shrink-0">
-                              <button onClick={() => toggleReveal(cred.id)} className="text-gray-400 hover:text-indigo-600">
-                                {revealedIds.has(cred.id) ? <EyeOff size={13} /> : <Eye size={13} />}
-                              </button>
-                              <button onClick={() => copyToClipboard(cred.password, 'Password')} className="text-gray-400 hover:text-indigo-600">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            {/* Username */}
+                            <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 border border-gray-100">
+                              <div className="flex items-center gap-2 text-xs text-gray-700 min-w-0">
+                                <User size={13} className="text-gray-400 shrink-0" />
+                                <span className="font-mono truncate">{cred.username}</span>
+                              </div>
+                              <button onClick={() => copyToClipboard(cred.username, 'Username')} className="text-gray-400 hover:text-indigo-600 ml-2 shrink-0" title="Copy username">
                                 <Copy size={13} />
                               </button>
                             </div>
-                          </div>
-                        </div>
 
-                        {cred.notes && <p className="text-xs text-gray-400 italic">{cred.notes}</p>}
-                      </div>
-                    ))}
+                            {/* Password */}
+                            <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 border border-gray-100">
+                              <div className="flex items-center gap-2 text-xs text-gray-700 min-w-0">
+                                <Lock size={13} className="text-gray-400 shrink-0" />
+                                <span className="font-mono truncate">
+                                  {revealedIds.has(cred.id) ? cred.password : '••••••••••••'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                                <button onClick={() => toggleReveal(cred.id)} className="text-gray-400 hover:text-indigo-600" title={revealedIds.has(cred.id) ? 'Hide' : 'Reveal'}>
+                                  {revealedIds.has(cred.id) ? <EyeOff size={13} /> : <Eye size={13} />}
+                                </button>
+                                <button onClick={() => copyToClipboard(cred.password, 'Password')} className="text-gray-400 hover:text-indigo-600" title="Copy password">
+                                  <Copy size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {cred.notes && <p className="text-[11px] text-gray-500 italic mt-1">Note: {cred.notes}</p>}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </>
@@ -350,54 +450,10 @@ export default function Credentials() {
                               <p className="text-xs text-gray-400 mt-0.5">Assigned: {w.assignedTo.name}</p>
                             )}
                           </div>
-                          <span className={`badge shrink-0 ${workStatusColor[w.status] || 'bg-gray-100 text-gray-600'} capitalize`}>
-                            {w.status.replace('_', ' ')}
+                          <span className={`badge ${w.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {w.status}
                           </span>
                         </div>
-
-                        {/* Progress bar */}
-                        <div>
-                          <div className="flex justify-between text-xs text-gray-500 mb-1">
-                            <span>Progress</span>
-                            <span>{w.completionPercent}%</span>
-                          </div>
-                          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-blue-500 rounded-full transition-all"
-                              style={{ width: `${w.completionPercent}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-                          {w.startDate && <span>Start: {new Date(w.startDate).toLocaleDateString()}</span>}
-                          {w.endDate && <span>Due: {new Date(w.endDate).toLocaleDateString()}</span>}
-                        </div>
-
-                        {/* Sub-works */}
-                        {w.works && w.works.length > 0 && (
-                          <div className="border-t border-gray-100 pt-2 space-y-1.5">
-                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Work Logs</p>
-                            {w.works.map((sw) => (
-                              <div key={sw.id} className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-3 py-1.5">
-                                <div className="flex items-center gap-2">
-                                  {sw.status === 'completed' ? (
-                                    <CheckCircle size={12} className="text-green-500" />
-                                  ) : sw.status === 'in_progress' ? (
-                                    <Clock size={12} className="text-blue-500" />
-                                  ) : (
-                                    <AlertCircle size={12} className="text-orange-400" />
-                                  )}
-                                  <span className="text-gray-700">{sw.title}</span>
-                                </div>
-                                <div className="flex items-center gap-3 text-gray-400">
-                                  {sw.hoursWorked && <span>{sw.hoursWorked}h</span>}
-                                  <span>{new Date(sw.workDate).toLocaleDateString()}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     ))}
                   </div>
@@ -473,38 +529,117 @@ export default function Credentials() {
       <SlidePanel
         open={credPanel}
         onClose={() => { setCredPanel(false); setEditingCred(null); }}
-        title={editingCred ? 'Edit Credential' : 'Add Credential'}
+        title={editingCred ? 'Edit Social Account' : 'Connect Social Media Account'}
         subtitle={selectedClient?.name}
       >
         <form onSubmit={(e) => { e.preventDefault(); save.mutate(form); }} className="p-6 space-y-4">
+          {/* Platform Selector */}
           <div>
-            <label className="form-label">Label *</label>
-            <input className="form-input" placeholder="e.g. Website Admin, Email, cPanel" value={form.label}
-              onChange={(e) => setForm({ ...form, label: e.target.value })} required />
+            <label className="form-label font-bold text-gray-900">Select Platform *</label>
+            <div className="grid grid-cols-3 gap-2 mt-1">
+              {Object.entries(PLATFORM_CONFIG).map(([pKey, pVal]) => {
+                const isSelected = form.platform === pKey;
+                return (
+                  <button
+                    type="button"
+                    key={pKey}
+                    onClick={() => {
+                      const updated = { ...form, platform: pKey };
+                      if (!form.label || form.label.includes('Instagram') || form.label.includes('Facebook')) {
+                        updated.label = `${pVal.label} - @${(form.username || 'username').replace(/^@/, '')}`;
+                      }
+                      if (form.username && pVal.defaultUrl) {
+                        updated.url = pVal.defaultUrl(form.username);
+                      }
+                      setForm(updated);
+                    }}
+                    className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all ${
+                      isSelected
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-900 ring-2 ring-indigo-200'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'
+                    }`}
+                  >
+                    <span className="text-lg">{pVal.icon}</span>
+                    <span className="text-[11px] truncate">{pVal.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
           <div>
-            <label className="form-label">Website URL</label>
-            <input className="form-input" placeholder="https://example.com" value={form.url}
-              onChange={(e) => setForm({ ...form, url: e.target.value })} />
+            <label className="form-label font-semibold text-gray-900">Account Label / Title *</label>
+            <input
+              className="form-input"
+              placeholder="e.g. Doha Branch IG, Official FB Page"
+              value={form.label}
+              onChange={(e) => setForm({ ...form, label: e.target.value })}
+              required
+            />
           </div>
+
           <div>
-            <label className="form-label">Username / Email *</label>
-            <input className="form-input" placeholder="username or email" value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })} required autoComplete="off" />
+            <label className="form-label font-semibold text-gray-900">Username / Handle *</label>
+            <div className="relative">
+              <input
+                className="form-input"
+                placeholder="e.g. @webbeaqatar or official_page"
+                value={form.username}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const pCfg = PLATFORM_CONFIG[form.platform] || PLATFORM_CONFIG.instagram;
+                  setForm({
+                    ...form,
+                    username: val,
+                    url: pCfg.defaultUrl ? pCfg.defaultUrl(val) : form.url,
+                  });
+                }}
+                required
+                autoComplete="off"
+              />
+            </div>
           </div>
+
           <div>
-            <label className="form-label">Password *</label>
-            <input className="form-input" type="text" placeholder="password" value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })} required autoComplete="off" />
+            <label className="form-label font-semibold text-gray-900">Password *</label>
+            <input
+              className="form-input"
+              type="text"
+              placeholder="Account password (encrypted with AES-256)"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              required
+              autoComplete="off"
+            />
+            <p className="text-[11px] text-gray-400 mt-1">
+              Passwords are military-grade AES-256 encrypted and stored safely.
+            </p>
           </div>
+
+          <div>
+            <label className="form-label">Profile / Page URL</label>
+            <input
+              className="form-input"
+              placeholder="https://instagram.com/webbeaqatar"
+              value={form.url}
+              onChange={(e) => setForm({ ...form, url: e.target.value })}
+            />
+          </div>
+
           <div>
             <label className="form-label">Notes</label>
-            <textarea className="form-input" rows={3} placeholder="Any additional notes..."
-              value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            <textarea
+              className="form-input"
+              rows={2}
+              placeholder="Any 2FA backup codes, manager notes..."
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
           </div>
+
           <div className="flex gap-3 pt-2 border-t border-gray-100">
             <button type="submit" disabled={save.isPending} className="btn-primary flex-1 py-2.5">
-              {save.isPending ? 'Saving...' : editingCred ? 'Update' : 'Save Credential'}
+              {save.isPending ? 'Connecting...' : editingCred ? 'Update Account' : 'Verify & Connect Account'}
             </button>
             <button type="button" onClick={() => setCredPanel(false)} className="btn-secondary flex-1 py-2.5">
               Cancel

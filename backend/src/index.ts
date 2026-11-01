@@ -29,6 +29,7 @@ import fileRoutes from './routes/files';
 import settingsRoutes from './routes/settings';
 import credentialRoutes from './routes/credentials';
 import socialMediaRoutes from './routes/socialMedia';
+import { startSocialPublisherWorker } from './workers/socialPublisher';
 
 const app = express();
 
@@ -125,4 +126,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+  startSocialPublisherWorker();
+});
