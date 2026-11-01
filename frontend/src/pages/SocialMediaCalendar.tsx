@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
@@ -10,10 +10,11 @@ import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Edit, Trash2,
   X, Check, Copy, ExternalLink, Image as ImageIcon, Video as VideoIcon,
   Play, Search, Building2, Phone, Mail, MapPin, Clock, Share2,
-  SlidersHorizontal, Film, Eye, Sparkles, Download
+  SlidersHorizontal, Film, Eye, Sparkles, Download, Layers,
+  Link as LinkIcon, MoveLeft, MoveRight, Maximize2, Upload
 } from 'lucide-react';
 
-interface MediaItem {
+export interface MediaItem {
   url: string;
   originalName: string;
   fileName: string;
@@ -50,6 +51,11 @@ interface SocialPost {
   createdAt?: string;
 }
 
+interface LightboxState {
+  items: MediaItem[];
+  currentIndex: number;
+}
+
 const AVAILABLE_PLATFORMS = [
   { id: 'instagram', name: 'Instagram', color: 'bg-gradient-to-tr from-amber-500 via-pink-600 to-purple-600 text-white', icon: '📸' },
   { id: 'facebook', name: 'Facebook', color: 'bg-blue-600 text-white', icon: '👥' },
@@ -62,11 +68,11 @@ const AVAILABLE_PLATFORMS = [
 ];
 
 const POST_TYPES = [
-  { id: 'post', label: 'Feed Post', icon: ImageIcon },
-  { id: 'reel', label: 'Reel / Short', icon: Film },
-  { id: 'carousel', label: 'Carousel', icon: Sparkles },
+  { id: 'post', label: 'Feed Post (Image)', icon: ImageIcon },
+  { id: 'reel', label: 'Reel / Short (Video)', icon: Film },
+  { id: 'carousel', label: 'Carousel (Multiple Images)', icon: Sparkles },
   { id: 'story', label: 'Story', icon: Clock },
-  { id: 'video', label: 'Long Video', icon: VideoIcon },
+  { id: 'video', label: 'Long Video Post', icon: VideoIcon },
 ];
 
 const STATUS_CONFIG: Record<string, { label: string; badge: string; dot: string; bg: string }> = {
@@ -76,6 +82,25 @@ const STATUS_CONFIG: Record<string, { label: string; badge: string; dot: string;
   scheduled: { label: 'Scheduled', badge: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500', bg: 'border-l-purple-500' },
   published: { label: 'Published', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', bg: 'border-l-emerald-500' },
 };
+
+function formatFileSize(bytes?: number): string {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getMediaUrl(url?: string): string {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:') || url.startsWith('data:')) {
+    return url;
+  }
+  const base = api.defaults.baseURL?.replace(/\/api\/?$/, '') || '';
+  if (base && url.startsWith('/')) {
+    return `${base}${url}`;
+  }
+  return url;
+}
 
 const defaultForm: {
   clientId: number | '';
@@ -107,7 +132,8 @@ const defaultForm: {
 
 export default function SocialMediaCalendar() {
   const qc = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
 
   // Filters & State
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -121,11 +147,30 @@ export default function SocialMediaCalendar() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<SocialPost | null>(null);
   const [activePostDetails, setActivePostDetails] = useState<SocialPost | null>(null);
-  const [previewMedia, setPreviewMedia] = useState<MediaItem | null>(null);
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Upload Option Set State
+  const [uploadOptionTab, setUploadOptionTab] = useState<'images' | 'video' | 'url'>('images');
+  const [isDragging, setIsDragging] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
+  const [urlMediaType, setUrlMediaType] = useState<'image' | 'video'>('image');
+  const [urlName, setUrlName] = useState('');
 
   // Form State
   const [form, setForm] = useState(defaultForm);
+
+  // Keyboard navigation for Lightbox
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeLightbox();
+      if (e.key === 'ArrowRight') nextLightboxItem();
+      if (e.key === 'ArrowLeft') prevLightboxItem();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [lightbox]);
 
   // Queries
   const { data: clients = [] } = useQuery<Client[]>({
@@ -144,7 +189,6 @@ export default function SocialMediaCalendar() {
     },
   });
 
-  // Selected client object for details card
   const activeFilteredClient = selectedClientFilter !== 'all'
     ? clients.find((c) => c.id === Number(selectedClientFilter))
     : null;
@@ -198,14 +242,13 @@ export default function SocialMediaCalendar() {
     onError: () => toast.error('Failed to delete post'),
   });
 
-  // File Upload Handler (Image & Video)
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  // Media Upload & Management Handlers
+  const handleFilesUpload = async (filesList: FileList | File[]) => {
+    if (!filesList || filesList.length === 0) return;
 
     const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-      formData.append('media', files[i]);
+    for (let i = 0; i < filesList.length; i++) {
+      formData.append('media', filesList[i]);
     }
 
     try {
@@ -214,17 +257,75 @@ export default function SocialMediaCalendar() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const newMediaItems: MediaItem[] = res.data;
-      setForm((prev) => ({
-        ...prev,
-        mediaUrls: [...prev.mediaUrls, ...newMediaItems],
-      }));
-      toast.success(`${newMediaItems.length} media file(s) uploaded`);
+
+      const hasVideo = newMediaItems.some((m) => m.type === 'video');
+
+      setForm((prev) => {
+        let updatedPostType = prev.postType;
+        if (hasVideo && (prev.postType === 'post' || !prev.postType)) {
+          updatedPostType = 'reel';
+        } else if (!hasVideo && newMediaItems.length + prev.mediaUrls.length > 1 && prev.postType === 'post') {
+          updatedPostType = 'carousel';
+        }
+        return {
+          ...prev,
+          postType: updatedPostType,
+          mediaUrls: [...prev.mediaUrls, ...newMediaItems],
+        };
+      });
+
+      if (hasVideo) {
+        toast.success(`${newMediaItems.length} media file(s) uploaded. Type updated to Reel/Video.`, { icon: '🎬' });
+      } else {
+        toast.success(`${newMediaItems.length} media file(s) uploaded successfully`);
+      }
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Upload failed');
+      toast.error(err?.response?.data?.message || 'Media upload failed');
     } finally {
       setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (imageInputRef.current) imageInputRef.current.value = '';
+      if (videoInputRef.current) videoInputRef.current.value = '';
     }
+  };
+
+  const handleFileUploadInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      handleFilesUpload(e.target.files);
+    }
+  };
+
+  const handleFilesDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFilesUpload(e.dataTransfer.files);
+    }
+  };
+
+  const handleAddUrlMedia = () => {
+    if (!urlInput.trim()) return;
+    const url = urlInput.trim();
+    const cleanUrl = url.split('?')[0].toLowerCase();
+    const isDetectedVideo = cleanUrl.endsWith('.mp4') || cleanUrl.endsWith('.mov') || cleanUrl.endsWith('.webm') || cleanUrl.endsWith('.m4v');
+    const finalType: 'image' | 'video' = isDetectedVideo ? 'video' : urlMediaType;
+
+    const newMedia: MediaItem = {
+      url,
+      originalName: urlName.trim() || url.split('/').pop()?.split('?')[0] || (finalType === 'video' ? 'video-stream.mp4' : 'media-image.jpg'),
+      fileName: `url-${Date.now()}`,
+      mimeType: finalType === 'video' ? 'video/mp4' : 'image/jpeg',
+      type: finalType,
+    };
+
+    setForm((prev) => ({
+      ...prev,
+      postType: finalType === 'video' && prev.postType === 'post' ? 'reel' : prev.postType,
+      mediaUrls: [...prev.mediaUrls, newMedia],
+    }));
+
+    setUrlInput('');
+    setUrlName('');
+    toast.success(`Attached ${finalType === 'video' ? 'video' : 'image'} link successfully`);
   };
 
   const removeMedia = (index: number) => {
@@ -234,9 +335,42 @@ export default function SocialMediaCalendar() {
     }));
   };
 
-  // Open Form
+  const moveMedia = (fromIndex: number, toIndex: number) => {
+    setForm((prev) => {
+      const list = [...prev.mediaUrls];
+      if (toIndex < 0 || toIndex >= list.length) return prev;
+      const [moved] = list.splice(fromIndex, 1);
+      list.splice(toIndex, 0, moved);
+      return { ...prev, mediaUrls: list };
+    });
+  };
+
+  // Lightbox handlers
+  const openLightbox = (items: MediaItem[], startIndex = 0) => {
+    if (!items || items.length === 0) return;
+    setLightbox({ items, currentIndex: startIndex });
+  };
+
+  const closeLightbox = () => setLightbox(null);
+
+  const nextLightboxItem = () => {
+    if (!lightbox) return;
+    setLightbox((prev) =>
+      prev ? { ...prev, currentIndex: (prev.currentIndex + 1) % prev.items.length } : null
+    );
+  };
+
+  const prevLightboxItem = () => {
+    if (!lightbox) return;
+    setLightbox((prev) =>
+      prev ? { ...prev, currentIndex: (prev.currentIndex - 1 + prev.items.length) % prev.items.length } : null
+    );
+  };
+
+  // Open Form Modals
   const openNewPostModal = (dateStr?: string) => {
     setEditingPost(null);
+    setUploadOptionTab('images');
     setForm({
       ...defaultForm,
       clientId: selectedClientFilter !== 'all' ? Number(selectedClientFilter) : (clients[0]?.id || ''),
@@ -247,6 +381,7 @@ export default function SocialMediaCalendar() {
 
   const openEditModal = (post: SocialPost) => {
     setEditingPost(post);
+    setUploadOptionTab(post.mediaUrls.some((m) => m.type === 'video') ? 'video' : 'images');
     const dateObj = new Date(post.scheduledDate);
     setForm({
       clientId: post.clientId,
@@ -265,7 +400,6 @@ export default function SocialMediaCalendar() {
     setIsFormOpen(true);
   };
 
-  // Toggle platform selection in form
   const togglePlatform = (platId: string) => {
     setForm((prev) => {
       const exists = prev.platforms.includes(platId);
@@ -277,24 +411,22 @@ export default function SocialMediaCalendar() {
     });
   };
 
-  // Copy caption & hashtags to clipboard
   const handleCopyCaption = (post: SocialPost) => {
     const textToCopy = [post.caption, post.hashtags].filter(Boolean).join('\n\n');
     navigator.clipboard.writeText(textToCopy);
     toast.success('Caption & hashtags copied to clipboard!');
   };
 
-  // Client selected in the form modal
   const formClient = clients.find((c) => c.id === Number(form.clientId));
 
-  // Calendar dates calculation
+  // Calendar dates
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   const calStart = startOfWeek(monthStart, { weekStartsOn: 1 });
   const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
   const calendarDays = eachDayOfInterval({ start: calStart, end: calEnd });
 
-  // Filter posts based on search query
+  // Filter posts
   const filteredPosts = posts.filter((p) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -314,7 +446,7 @@ export default function SocialMediaCalendar() {
   const totalPostsCount = filteredPosts.length;
   const scheduledCount = filteredPosts.filter((p) => p.status === 'scheduled').length;
   const publishedCount = filteredPosts.filter((p) => p.status === 'published').length;
-  const pendingCount = filteredPosts.filter((p) => p.status === 'draft' || p.status === 'in_review').length;
+  const videoPostsCount = filteredPosts.filter((p) => p.mediaUrls?.some((m) => m.type === 'video')).length;
 
   return (
     <div className="space-y-6 pb-12">
@@ -327,7 +459,7 @@ export default function SocialMediaCalendar() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Social Media Calendar</h1>
-              <p className="text-xs text-gray-500">Plan, organize and preview client content across all platforms</p>
+              <p className="text-xs text-gray-500">Plan, organize and preview client content across all platforms (Photos, Carousels & High-Res Videos)</p>
             </div>
           </div>
         </div>
@@ -384,7 +516,7 @@ export default function SocialMediaCalendar() {
         <div className="card py-3 px-4 flex items-center justify-between border-slate-100">
           <div>
             <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Published</span>
-            <p className="text-xl font-bold text-emerald-600 mt-0.5">{publishedCount}</p>
+            <p className="text-xl font-bold text-emerald-700 mt-0.5">{publishedCount}</p>
           </div>
           <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <Check size={16} />
@@ -392,10 +524,10 @@ export default function SocialMediaCalendar() {
         </div>
         <div className="card py-3 px-4 flex items-center justify-between border-slate-100">
           <div>
-            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Draft / Review</span>
-            <p className="text-xl font-bold text-amber-600 mt-0.5">{pendingCount}</p>
+            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Reels & Videos</span>
+            <p className="text-xl font-bold text-rose-600 mt-0.5">{videoPostsCount}</p>
           </div>
-          <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
             <Film size={16} />
           </div>
         </div>
@@ -492,7 +624,7 @@ export default function SocialMediaCalendar() {
           </div>
         </div>
 
-        {/* Selected Client Overview Card (Active Client Details) */}
+        {/* Selected Client Overview Card */}
         {activeFilteredClient && (
           <div className="mt-2 bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-white p-4 rounded-xl border border-blue-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
@@ -624,7 +756,7 @@ export default function SocialMediaCalendar() {
               return (
                 <div
                   key={day.toISOString()}
-                  className={`min-h-[140px] p-2 flex flex-col justify-between transition-colors relative group ${
+                  className={`min-h-[145px] p-2 flex flex-col justify-between transition-colors relative group ${
                     inMonth ? 'bg-white hover:bg-blue-50/20' : 'bg-gray-50/60 opacity-60'
                   }`}
                 >
@@ -654,12 +786,12 @@ export default function SocialMediaCalendar() {
                   </div>
 
                   {/* Posts Cards Inside Day */}
-                  <div className="space-y-1.5 flex-1 overflow-y-auto max-h-[115px] pr-0.5">
+                  <div className="space-y-1.5 flex-1 overflow-y-auto max-h-[120px] pr-0.5">
                     {dayPosts.map((post) => {
                       const statusInfo = STATUS_CONFIG[post.status] || STATUS_CONFIG.draft;
                       const hasMedia = post.mediaUrls && post.mediaUrls.length > 0;
                       const hasVideo = post.mediaUrls?.some((m) => m.type === 'video');
-                      const firstImage = post.mediaUrls?.find((m) => m.type === 'image');
+                      const firstMedia = hasMedia ? post.mediaUrls[0] : null;
 
                       return (
                         <div
@@ -689,24 +821,36 @@ export default function SocialMediaCalendar() {
                             </span>
                           </div>
 
-                          {/* Media Thumbnail snippet if present */}
-                          {hasMedia && (
-                            <div className="relative mb-1 rounded overflow-hidden h-10 bg-slate-900 flex items-center justify-center">
-                              {firstImage ? (
+                          {/* Media Thumbnail snippet with Video/Image tags */}
+                          {hasMedia && firstMedia && (
+                            <div className="relative mb-1 rounded overflow-hidden h-11 bg-slate-900 flex items-center justify-center">
+                              {firstMedia.type === 'video' ? (
+                                <div className="w-full h-full relative flex items-center justify-center bg-slate-950">
+                                  <video
+                                    src={getMediaUrl(firstMedia.url)}
+                                    className="w-full h-full object-cover opacity-80"
+                                    preload="metadata"
+                                  />
+                                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                    <div className="w-5 h-5 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow">
+                                      <Play size={10} fill="white" />
+                                    </div>
+                                  </div>
+                                  <span className="absolute bottom-0.5 left-1 text-[8px] font-bold text-rose-300 uppercase tracking-wider">
+                                    Reel
+                                  </span>
+                                </div>
+                              ) : (
                                 <img
-                                  src={firstImage.url}
+                                  src={getMediaUrl(firstMedia.url)}
                                   alt={post.title}
                                   className="w-full h-full object-cover"
                                 />
-                              ) : (
-                                <div className="text-white text-[10px] flex items-center gap-1 font-semibold">
-                                  <VideoIcon size={12} className="text-rose-400" /> Video
-                                </div>
                               )}
-                              {hasVideo && (
-                                <div className="absolute top-1 right-1 bg-black/60 rounded p-0.5 text-white">
-                                  <Play size={10} fill="white" />
-                                </div>
+                              {post.mediaUrls.length > 1 && (
+                                <span className="absolute top-0.5 right-0.5 bg-black/70 text-white text-[8px] font-bold px-1 rounded">
+                                  +{post.mediaUrls.length - 1}
+                                </span>
                               )}
                             </div>
                           )}
@@ -718,10 +862,17 @@ export default function SocialMediaCalendar() {
 
                           {/* Client Name Badge */}
                           <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
-                            <span className="truncate max-w-[80px] font-medium text-blue-600">
+                            <span className="truncate max-w-[85px] font-medium text-blue-600">
                               {post.client?.name}
                             </span>
-                            <span className={`inline-block w-1.5 h-1.5 rounded-full ${statusInfo.dot}`} />
+                            <div className="flex items-center gap-1">
+                              {hasVideo && (
+                                <span title="Contains video">
+                                  <Film size={10} className="text-rose-500" />
+                                </span>
+                              )}
+                              <span className={`inline-block w-1.5 h-1.5 rounded-full ${statusInfo.dot}`} />
+                            </div>
                           </div>
                         </div>
                       );
@@ -782,35 +933,41 @@ export default function SocialMediaCalendar() {
 
                       {/* Media Preview Box */}
                       {hasMedia && firstMedia && (
-                        <div className="relative mb-3 rounded-lg overflow-hidden bg-slate-900 aspect-video flex items-center justify-center group">
+                        <div
+                          onClick={() => openLightbox(post.mediaUrls, 0)}
+                          className="relative mb-3 rounded-lg overflow-hidden bg-slate-900 aspect-video flex items-center justify-center group cursor-pointer"
+                        >
                           {firstMedia.type === 'video' ? (
                             <div className="w-full h-full relative">
                               <video
-                                src={firstMedia.url}
-                                className="w-full h-full object-cover"
+                                src={getMediaUrl(firstMedia.url)}
+                                className="w-full h-full object-cover opacity-90"
                                 preload="metadata"
                               />
-                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                <div className="w-10 h-10 rounded-full bg-white/80 text-gray-900 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                  <Play size={18} fill="currentColor" />
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:bg-black/30 transition-colors">
+                                <div className="w-11 h-11 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                  <Play size={20} fill="white" className="ml-0.5" />
                                 </div>
                               </div>
-                              <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded font-medium flex items-center gap-1">
-                                <VideoIcon size={10} /> Video
+                              <span className="absolute bottom-2 right-2 bg-rose-600/90 text-white text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1 shadow">
+                                <VideoIcon size={11} /> Video / Reel
                               </span>
                             </div>
                           ) : (
                             <img
-                              src={firstMedia.url}
+                              src={getMediaUrl(firstMedia.url)}
                               alt={post.title}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             />
                           )}
                           {post.mediaUrls.length > 1 && (
-                            <span className="absolute top-2 right-2 bg-black/70 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
+                            <span className="absolute top-2 right-2 bg-black/75 text-white text-[10px] px-2 py-0.5 rounded-full font-bold shadow">
                               +{post.mediaUrls.length - 1} more
                             </span>
                           )}
+                          <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-[10px] px-2 py-0.5 rounded flex items-center gap-1">
+                            <Maximize2 size={11} /> Click to preview
+                          </div>
                         </div>
                       )}
 
@@ -831,7 +988,14 @@ export default function SocialMediaCalendar() {
                             </span>
                           ) : null;
                         })}
-                        <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-medium uppercase">
+                        <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-medium uppercase flex items-center gap-1">
+                          {post.postType === 'reel' || post.postType === 'video' ? (
+                            <Film size={10} className="text-rose-500" />
+                          ) : post.postType === 'carousel' ? (
+                            <Sparkles size={10} className="text-amber-500" />
+                          ) : (
+                            <ImageIcon size={10} className="text-blue-500" />
+                          )}
                           {post.postType}
                         </span>
                       </div>
@@ -1034,7 +1198,7 @@ export default function SocialMediaCalendar() {
                     <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                       Uploaded Media ({activePostDetails.mediaUrls.length})
                     </span>
-                    <span className="text-xs text-gray-400">Click media to view full size</span>
+                    <span className="text-xs text-gray-400">Click any media to expand or play fullscreen</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1044,43 +1208,92 @@ export default function SocialMediaCalendar() {
                         className="rounded-xl border border-gray-200 overflow-hidden bg-slate-950 shadow-sm relative group"
                       >
                         {media.type === 'video' ? (
-                          <div className="w-full">
-                            <video
-                              src={media.url}
-                              controls
-                              className="w-full max-h-64 object-contain bg-black"
-                            />
-                            <div className="p-2 bg-slate-900 text-white flex items-center justify-between text-xs">
-                              <span className="truncate text-slate-300 max-w-[200px]">
-                                {media.originalName}
-                              </span>
-                              <a
-                                href={media.url}
-                                download
-                                className="text-blue-400 hover:text-white flex items-center gap-1"
-                              >
-                                <Download size={12} /> Save
-                              </a>
+                          <div className="w-full flex flex-col">
+                            <div className="relative bg-black flex items-center justify-center max-h-64 overflow-hidden">
+                              <video
+                                src={getMediaUrl(media.url)}
+                                controls
+                                preload="metadata"
+                                className="w-full max-h-64 object-contain bg-black"
+                              />
+                            </div>
+                            <div className="p-2.5 bg-slate-900 text-white flex items-center justify-between text-xs">
+                              <div className="min-w-0 pr-2">
+                                <span className="truncate block font-medium text-slate-200">
+                                  {media.originalName}
+                                </span>
+                                <span className="text-[10px] text-rose-400 font-semibold">
+                                  🎬 Video {media.size ? `• ${formatFileSize(media.size)}` : ''}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => openLightbox(activePostDetails.mediaUrls, idx)}
+                                  className="text-blue-400 hover:text-white flex items-center gap-1 p-1"
+                                  title="Expand Fullscreen"
+                                >
+                                  <Maximize2 size={13} />
+                                </button>
+                                <a
+                                  href={getMediaUrl(media.url)}
+                                  download={media.originalName}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-blue-400 hover:text-white flex items-center gap-1 p-1"
+                                  title="Download Video"
+                                >
+                                  <Download size={13} />
+                                </a>
+                              </div>
                             </div>
                           </div>
                         ) : (
-                          <div className="relative">
-                            <img
-                              src={media.url}
-                              alt={media.originalName}
-                              className="w-full h-56 object-cover cursor-pointer"
-                              onClick={() => setPreviewMedia(media)}
-                            />
-                            <div className="p-2 bg-slate-900 text-white flex items-center justify-between text-xs">
-                              <span className="truncate text-slate-300 max-w-[200px]">
-                                {media.originalName}
-                              </span>
-                              <button
-                                onClick={() => setPreviewMedia(media)}
-                                className="text-blue-400 hover:text-white flex items-center gap-1"
-                              >
-                                <Eye size={12} /> Expand
-                              </button>
+                          <div className="relative flex flex-col">
+                            <div
+                              onClick={() => openLightbox(activePostDetails.mediaUrls, idx)}
+                              className="relative cursor-pointer overflow-hidden group/img h-56 bg-slate-900"
+                            >
+                              <img
+                                src={getMediaUrl(media.url)}
+                                alt={media.originalName}
+                                className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300"
+                              />
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                <span className="bg-white/90 text-gray-900 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-lg">
+                                  <Eye size={13} /> Expand Photo
+                                </span>
+                              </div>
+                            </div>
+                            <div className="p-2.5 bg-slate-900 text-white flex items-center justify-between text-xs">
+                              <div className="min-w-0 pr-2">
+                                <span className="truncate block font-medium text-slate-200">
+                                  {media.originalName}
+                                </span>
+                                <span className="text-[10px] text-blue-400 font-semibold">
+                                  🖼️ Image {media.size ? `• ${formatFileSize(media.size)}` : ''}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => openLightbox(activePostDetails.mediaUrls, idx)}
+                                  className="text-blue-400 hover:text-white flex items-center gap-1 p-1"
+                                  title="Expand Photo"
+                                >
+                                  <Maximize2 size={13} />
+                                </button>
+                                <a
+                                  href={getMediaUrl(media.url)}
+                                  download={media.originalName}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-blue-400 hover:text-white flex items-center gap-1 p-1"
+                                  title="Download Image"
+                                >
+                                  <Download size={13} />
+                                </a>
+                              </div>
                             </div>
                           </div>
                         )}
@@ -1174,26 +1387,121 @@ export default function SocialMediaCalendar() {
       )}
 
       {/* ============================================================== */}
-      {/* LIGHTBOX FOR FULL IMAGE PREVIEW */}
+      {/* FULLSCREEN MEDIA LIGHTBOX (IMAGE & VIDEO PLAYER) */}
       {/* ============================================================== */}
-      {previewMedia && (
-        <div className="fixed inset-0 z-60 bg-black/90 flex items-center justify-center p-4">
-          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center">
-            <button
-              onClick={() => setPreviewMedia(null)}
-              className="absolute -top-10 right-0 text-white hover:text-gray-300 p-2"
-            >
-              <X size={24} />
-            </button>
-            <img
-              src={previewMedia.url}
-              alt={previewMedia.originalName}
-              className="max-h-[85vh] max-w-full rounded-lg shadow-2xl object-contain"
-            />
-            <p className="text-white text-xs mt-3 text-center">{previewMedia.originalName}</p>
+      {lightbox && lightbox.items.length > 0 && (() => {
+        const currentMedia = lightbox.items[lightbox.currentIndex];
+        if (!currentMedia) return null;
+        const isVideo = currentMedia.type === 'video';
+
+        return (
+          <div className="fixed inset-0 z-70 bg-black/95 backdrop-blur-md flex items-center justify-center p-4">
+            {/* Top action bar */}
+            <div className="absolute top-4 inset-x-4 flex items-center justify-between text-white z-20">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-md">
+                  {lightbox.currentIndex + 1} of {lightbox.items.length}
+                </span>
+                <span className="text-sm font-semibold truncate max-w-[280px] sm:max-w-md text-gray-200">
+                  {currentMedia.originalName}
+                </span>
+                <span className={`text-[11px] px-2 py-0.5 rounded font-bold uppercase ${isVideo ? 'bg-rose-600 text-white' : 'bg-blue-600 text-white'}`}>
+                  {isVideo ? '🎬 Video' : '🖼️ Image'}
+                </span>
+                {currentMedia.size && (
+                  <span className="text-xs text-gray-400 hidden sm:inline">
+                    {formatFileSize(currentMedia.size)}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={getMediaUrl(currentMedia.url)}
+                  download={currentMedia.originalName}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium"
+                  title="Download File"
+                >
+                  <Download size={16} /> Download
+                </a>
+                <button
+                  onClick={closeLightbox}
+                  className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                  title="Close (Esc)"
+                >
+                  <X size={22} />
+                </button>
+              </div>
+            </div>
+
+            {/* Navigation: Previous */}
+            {lightbox.items.length > 1 && (
+              <button
+                onClick={prevLightboxItem}
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-all z-20"
+                title="Previous (Left Arrow)"
+              >
+                <ChevronLeft size={36} />
+              </button>
+            )}
+
+            {/* Main Media Player / Viewer */}
+            <div className="max-w-5xl max-h-[80vh] w-full flex items-center justify-center p-2">
+              {isVideo ? (
+                <video
+                  key={currentMedia.url}
+                  src={getMediaUrl(currentMedia.url)}
+                  controls
+                  autoPlay
+                  className="max-h-[78vh] max-w-full rounded-xl shadow-2xl bg-black"
+                />
+              ) : (
+                <img
+                  src={getMediaUrl(currentMedia.url)}
+                  alt={currentMedia.originalName}
+                  className="max-h-[78vh] max-w-full rounded-xl shadow-2xl object-contain"
+                />
+              )}
+            </div>
+
+            {/* Navigation: Next */}
+            {lightbox.items.length > 1 && (
+              <button
+                onClick={nextLightboxItem}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-all z-20"
+                title="Next (Right Arrow)"
+              >
+                <ChevronRight size={36} />
+              </button>
+            )}
+
+            {/* Bottom thumbnail strip if multi-media */}
+            {lightbox.items.length > 1 && (
+              <div className="absolute bottom-4 inset-x-0 flex justify-center gap-2 p-2 overflow-x-auto z-20">
+                {lightbox.items.map((item, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setLightbox((p) => p ? { ...p, currentIndex: idx } : null)}
+                    className={`w-14 h-14 rounded-lg overflow-hidden border-2 transition-all relative shrink-0 ${
+                      idx === lightbox.currentIndex ? 'border-blue-500 scale-105 shadow-lg ring-2 ring-blue-400/50' : 'border-white/20 opacity-60 hover:opacity-100'
+                    }`}
+                  >
+                    {item.type === 'video' ? (
+                      <div className="w-full h-full bg-slate-900 flex items-center justify-center text-white">
+                        <Play size={14} fill="white" />
+                      </div>
+                    ) : (
+                      <img src={getMediaUrl(item.url)} alt={item.originalName} className="w-full h-full object-cover" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ============================================================== */}
       {/* ADD / EDIT SOCIAL POST MODAL */}
@@ -1389,97 +1697,320 @@ export default function SocialMediaCalendar() {
               </div>
 
               {/* ============================================================== */}
-              {/* IMAGE AND VIDEO UPLOAD SECTION */}
+              {/* IMAGE AND VIDEO UPLOAD STUDIO (OPTION SET) */}
               {/* ============================================================== */}
-              <div className="space-y-3">
+              <div className="space-y-3 pt-2">
                 <div className="flex items-center justify-between">
-                  <label className="form-label font-semibold text-gray-900 mb-0">
-                    Images & Videos Attachments
-                  </label>
-                  <span className="text-xs text-gray-400">
-                    Images (JPG, PNG, WEBP) & Videos (MP4, MOV, WEBM) up to 150MB
-                  </span>
+                  <div>
+                    <label className="form-label font-bold text-gray-900 mb-0 flex items-center gap-2">
+                      <Layers size={16} className="text-blue-600" /> Media Attachments (Photos & Videos)
+                    </label>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      Upload single or multi-photo carousels, or upload high-definition video reels
+                    </p>
+                  </div>
+                  {form.mediaUrls.length > 0 && (
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                      {form.mediaUrls.length} {form.mediaUrls.length === 1 ? 'media item' : 'media items'}
+                    </span>
+                  )}
                 </div>
 
-                {/* Upload Trigger Area */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,video/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="media-file-input"
-                />
+                {/* Option Set Segmented Tabs */}
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-gray-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setUploadOptionTab('images')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-bold rounded-lg transition-all ${
+                      uploadOptionTab === 'images'
+                        ? 'bg-white text-blue-700 shadow-xs ring-1 ring-blue-100'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <ImageIcon size={14} className={uploadOptionTab === 'images' ? 'text-blue-600' : 'text-gray-400'} />
+                    <span>Upload Photos</span>
+                  </button>
 
-                <label
-                  htmlFor="media-file-input"
-                  className={`border-2 border-dashed rounded-xl p-5 text-center flex flex-col items-center justify-center cursor-pointer transition-colors ${
-                    isUploading
-                      ? 'border-blue-400 bg-blue-50/50'
-                      : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50/20'
-                  }`}
-                >
-                  <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-2">
-                    {isUploading ? (
-                      <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full" />
-                    ) : (
-                      <Share2 size={18} />
-                    )}
-                  </div>
-                  <p className="text-xs font-semibold text-gray-800">
-                    {isUploading ? 'Uploading media...' : 'Click to upload or drag & drop images and videos'}
-                  </p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
-                    Select multiple images for carousels or high quality videos for reels & posts
-                  </p>
-                </label>
+                  <button
+                    type="button"
+                    onClick={() => setUploadOptionTab('video')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-bold rounded-lg transition-all ${
+                      uploadOptionTab === 'video'
+                        ? 'bg-white text-rose-700 shadow-xs ring-1 ring-rose-100'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <Film size={14} className={uploadOptionTab === 'video' ? 'text-rose-600' : 'text-gray-400'} />
+                    <span>Upload Video</span>
+                  </button>
 
-                {/* Uploaded Media Previews */}
-                {form.mediaUrls.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
-                    {form.mediaUrls.map((media, idx) => (
-                      <div
-                        key={idx}
-                        className="relative rounded-xl border border-gray-200 overflow-hidden bg-slate-900 group aspect-video flex items-center justify-center"
-                      >
-                        {media.type === 'video' ? (
-                          <div className="w-full h-full relative flex items-center justify-center">
-                            <video
-                              src={media.url}
-                              className="w-full h-full object-cover"
-                              preload="metadata"
-                            />
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                              <Play size={20} className="text-white" fill="white" />
-                            </div>
-                            <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1 py-0.5 rounded">
-                              Video
-                            </span>
-                          </div>
+                  <button
+                    type="button"
+                    onClick={() => setUploadOptionTab('url')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-bold rounded-lg transition-all ${
+                      uploadOptionTab === 'url'
+                        ? 'bg-white text-indigo-700 shadow-xs ring-1 ring-indigo-100'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <LinkIcon size={14} className={uploadOptionTab === 'url' ? 'text-indigo-600' : 'text-gray-400'} />
+                    <span>Link / URL</span>
+                  </button>
+                </div>
+
+                {/* Tab 1: Image Upload */}
+                {uploadOptionTab === 'images' && (
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={handleFilesDrop}
+                    className={`border-2 border-dashed rounded-xl p-5 text-center flex flex-col items-center justify-center transition-all ${
+                      isDragging
+                        ? 'border-blue-500 bg-blue-50/70 scale-[0.99]'
+                        : 'border-blue-200 bg-blue-50/20 hover:border-blue-400 hover:bg-blue-50/40'
+                    }`}
+                  >
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      multiple
+                      accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/*"
+                      onChange={handleFileUploadInput}
+                      className="hidden"
+                      id="image-file-upload-input"
+                    />
+                    <label htmlFor="image-file-upload-input" className="cursor-pointer flex flex-col items-center w-full">
+                      <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center mb-2 shadow-xs">
+                        {isUploading ? (
+                          <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full" />
                         ) : (
-                          <img
-                            src={media.url}
-                            alt={media.originalName}
-                            className="w-full h-full object-cover"
-                          />
+                          <Upload size={20} />
                         )}
+                      </div>
+                      <p className="text-xs font-bold text-gray-800">
+                        {isUploading ? 'Uploading photos...' : 'Click to select or drag & drop images'}
+                      </p>
+                      <p className="text-[11px] text-gray-500 mt-0.5 max-w-sm">
+                        JPG, PNG, WEBP, GIF, SVG • Multiple photos supported for Carousels
+                      </p>
+                      <div className="mt-2 flex items-center gap-2 text-[10px] text-gray-400 flex-wrap justify-center">
+                        <span className="px-1.5 py-0.5 rounded bg-white border border-gray-200">1:1 Square (1080×1080)</span>
+                        <span className="px-1.5 py-0.5 rounded bg-white border border-gray-200">4:5 Portrait (1080×1350)</span>
+                        <span className="px-1.5 py-0.5 rounded bg-white border border-gray-200">9:16 Story (1080×1920)</span>
+                      </div>
+                    </label>
+                  </div>
+                )}
 
-                        {/* Remove button */}
+                {/* Tab 2: Video Upload */}
+                {uploadOptionTab === 'video' && (
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={handleFilesDrop}
+                    className={`border-2 border-dashed rounded-xl p-5 text-center flex flex-col items-center justify-center transition-all ${
+                      isDragging
+                        ? 'border-rose-500 bg-rose-50/70 scale-[0.99]'
+                        : 'border-rose-200 bg-rose-50/20 hover:border-rose-400 hover:bg-rose-50/40'
+                    }`}
+                  >
+                    <input
+                      ref={videoInputRef}
+                      type="file"
+                      multiple
+                      accept="video/mp4,video/quicktime,video/webm,video/x-m4v,video/*,.mp4,.mov,.webm,.m4v,.mkv"
+                      onChange={handleFileUploadInput}
+                      className="hidden"
+                      id="video-file-upload-input"
+                    />
+                    <label htmlFor="video-file-upload-input" className="cursor-pointer flex flex-col items-center w-full">
+                      <div className="w-11 h-11 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center mb-2 shadow-xs">
+                        {isUploading ? (
+                          <div className="animate-spin w-5 h-5 border-2 border-rose-600 border-t-transparent rounded-full" />
+                        ) : (
+                          <Film size={20} />
+                        )}
+                      </div>
+                      <p className="text-xs font-bold text-gray-800">
+                        {isUploading ? 'Uploading video file...' : 'Click to select or drag & drop video files'}
+                      </p>
+                      <p className="text-[11px] text-gray-500 mt-0.5 max-w-sm">
+                        MP4, MOV, WEBM up to 150MB • Reels, Shorts, TikToks & Video Posts
+                      </p>
+                      <div className="mt-2 flex items-center gap-2 text-[10px] text-rose-600 font-medium">
+                        <span className="px-2 py-0.5 rounded bg-rose-100/70 border border-rose-200">🎬 Reels & Shorts (9:16)</span>
+                        <span className="px-2 py-0.5 rounded bg-rose-100/70 border border-rose-200">🎥 Landscape Video (16:9)</span>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {/* Tab 3: Media Link / URL */}
+                {uploadOptionTab === 'url' && (
+                  <div className="p-4 rounded-xl border border-gray-200 bg-gray-50/70 space-y-3">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <div className="flex-1">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase">Media Direct URL / CDN Link</label>
+                        <input
+                          type="url"
+                          placeholder="https://example.com/video.mp4 or https://images.unsplash.com/..."
+                          value={urlInput}
+                          onChange={(e) => setUrlInput(e.target.value)}
+                          className="form-input text-xs mt-1"
+                        />
+                      </div>
+                      <div className="w-full sm:w-32">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase">Media Type</label>
+                        <select
+                          value={urlMediaType}
+                          onChange={(e) => setUrlMediaType(e.target.value as 'image' | 'video')}
+                          className="form-input text-xs mt-1 font-medium"
+                        >
+                          <option value="image">🖼️ Image</option>
+                          <option value="video">🎬 Video</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Optional media title (e.g. Hero Video)"
+                        value={urlName}
+                        onChange={(e) => setUrlName(e.target.value)}
+                        className="form-input text-xs flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddUrlMedia}
+                        disabled={!urlInput.trim()}
+                        className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+                      >
+                        <Plus size={13} /> Add Link
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Uploaded Media Manager & Previews */}
+                {form.mediaUrls.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                        Attached Media ({form.mediaUrls.length})
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] text-gray-400">Use arrows to rearrange carousel order</span>
                         <button
                           type="button"
-                          onClick={() => removeMedia(idx)}
-                          className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center opacity-90 hover:opacity-100 shadow-md transition-opacity"
-                          title="Remove media"
+                          onClick={() => setForm((p) => ({ ...p, mediaUrls: [] }))}
+                          className="text-[11px] text-red-600 hover:underline font-medium"
                         >
-                          <X size={12} />
+                          Clear all
                         </button>
-
-                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 text-white text-[10px] truncate">
-                          {media.originalName}
-                        </div>
                       </div>
-                    ))}
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {form.mediaUrls.map((media, idx) => (
+                        <div
+                          key={idx}
+                          className="relative rounded-xl border border-gray-200 overflow-hidden bg-slate-900 group aspect-video flex items-center justify-center shadow-xs"
+                        >
+                          {media.type === 'video' ? (
+                            <div className="w-full h-full relative flex items-center justify-center bg-slate-950">
+                              <video
+                                src={getMediaUrl(media.url)}
+                                className="w-full h-full object-cover opacity-80"
+                                preload="metadata"
+                              />
+                              <div
+                                onClick={() => openLightbox(form.mediaUrls, idx)}
+                                className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer group-hover:bg-black/20 transition-colors"
+                              >
+                                <div className="w-8 h-8 rounded-full bg-rose-600 text-white flex items-center justify-center shadow">
+                                  <Play size={14} fill="white" className="ml-0.5" />
+                                </div>
+                              </div>
+                              <span className="absolute bottom-1 left-1 bg-rose-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+                                🎬 Video
+                              </span>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => openLightbox(form.mediaUrls, idx)}
+                              className="w-full h-full cursor-pointer relative"
+                            >
+                              <img
+                                src={getMediaUrl(media.url)}
+                                alt={media.originalName}
+                                className="w-full h-full object-cover"
+                              />
+                              <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] font-medium px-1.5 py-0.5 rounded shadow">
+                                🖼️ Image
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Slide Order Badge */}
+                          <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
+                            {idx === 0 ? (
+                              <span className="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+                                #1 Cover
+                              </span>
+                            ) : (
+                              <span className="bg-black/70 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded shadow">
+                                #{idx + 1}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Quick Actions (Move & Delete) */}
+                          <div className="absolute top-1.5 right-1.5 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
+                            {idx > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => moveMedia(idx, idx - 1)}
+                                className="w-6 h-6 rounded-full bg-white/90 text-gray-800 flex items-center justify-center hover:bg-white shadow transition-transform hover:scale-110"
+                                title="Move Left / Earlier"
+                              >
+                                <MoveLeft size={11} />
+                              </button>
+                            )}
+                            {idx < form.mediaUrls.length - 1 && (
+                              <button
+                                type="button"
+                                onClick={() => moveMedia(idx, idx + 1)}
+                                className="w-6 h-6 rounded-full bg-white/90 text-gray-800 flex items-center justify-center hover:bg-white shadow transition-transform hover:scale-110"
+                                title="Move Right / Later"
+                              >
+                                <MoveRight size={11} />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeMedia(idx)}
+                              className="w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center hover:bg-red-700 shadow transition-transform hover:scale-110"
+                              title="Remove media"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+
+                          {/* File info footer */}
+                          <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/85 via-black/50 to-transparent p-1.5 text-white flex items-center justify-between text-[10px]">
+                            <span className="truncate max-w-[110px]" title={media.originalName}>
+                              {media.originalName}
+                            </span>
+                            {media.size && (
+                              <span className="text-[9px] text-gray-300 font-mono">
+                                {formatFileSize(media.size)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

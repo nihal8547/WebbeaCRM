@@ -9,7 +9,11 @@ const router = Router();
 router.use(authenticate);
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../../uploads');
+const uploadsDir = [
+  path.join(__dirname, '../../uploads'),
+  path.join(__dirname, '../uploads'),
+  path.join(process.cwd(), 'uploads'),
+].find((d) => fs.existsSync(d)) || path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }

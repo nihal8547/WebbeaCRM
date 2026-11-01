@@ -72,7 +72,17 @@ const apiLimiter = rateLimit({
 });
 
 app.use(express.json({ limit: '10mb' }));
-app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
+const uploadsDir = [
+  path.join(__dirname, '../uploads'),
+  path.join(__dirname, '../../uploads'),
+  path.join(process.cwd(), 'uploads'),
+].find((d) => fs.existsSync(d)) || path.join(process.cwd(), 'uploads');
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+app.use('/uploads', express.static(uploadsDir));
 
 // Routes
 app.use('/api/auth', authLimiter, authRoutes);

@@ -9,7 +9,11 @@ const router = Router();
 router.use(authenticate);
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../../uploads');
+const uploadsDir = [
+  path.join(__dirname, '../../uploads'),
+  path.join(__dirname, '../uploads'),
+  path.join(process.cwd(), 'uploads'),
+].find((d) => fs.existsSync(d)) || path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -23,16 +27,20 @@ const storage = multer.diskStorage({
   },
 });
 
+const allowedVideoExts = ['.mp4', '.mov', '.webm', '.m4v', '.avi', '.mkv', '.wmv', '.3gp', '.flv'];
+const allowedImageExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg', '.bmp', '.heic', '.heif'];
+
 const upload = multer({
   storage,
   limits: { fileSize: 150 * 1024 * 1024 }, // 150MB limit for high-res video & images
   fileFilter: (_req, file, cb) => {
-    const isImage = file.mimetype.startsWith('image/');
-    const isVideo = file.mimetype.startsWith('video/');
+    const ext = path.extname(file.originalname).toLowerCase();
+    const isImage = file.mimetype.startsWith('image/') || allowedImageExts.includes(ext);
+    const isVideo = file.mimetype.startsWith('video/') || allowedVideoExts.includes(ext);
     if (isImage || isVideo) {
       cb(null, true);
     } else {
-      cb(new Error('Only image and video files are supported.'));
+      cb(new Error('Only image (JPG, PNG, WEBP, GIF, SVG) and video (MP4, MOV, WEBM) files are supported.'));
     }
   },
 });
@@ -61,26 +69,45 @@ function formatPost(post: any) {
 }
 
 // POST /api/social-media/upload - Multi-media upload for images and videos
-router.post('/upload', upload.array('media', 10), (req: AuthRequest, res: Response) => {
-  try {
-    const files = req.files as Express.Multer.File[];
-    if (!files || files.length === 0) {
-      return res.status(400).json({ message: 'No media files uploaded' });
+router.post('/upload', (req: AuthRequest, res: Response) => {
+  upload.array('media', 20)(req, res, (err: any) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ message: 'File is too large. Maximum size is 150MB.' });
+        }
+        if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+          return res.status(400).json({ message: 'Maximum 20 media files can be uploaded at once.' });
+        }
+        return res.status(400).json({ message: `Upload error: ${err.message}` });
+      }
+      return res.status(400).json({ message: err.message || 'Media upload failed' });
     }
 
-    const uploaded = files.map((f) => ({
-      url: `/uploads/${f.filename}`,
-      fileName: f.filename,
-      originalName: f.originalname,
-      mimeType: f.mimetype,
-      size: f.size,
-      type: f.mimetype.startsWith('video/') ? 'video' : 'image',
-    }));
+    try {
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        return res.status(400).json({ message: 'No media files were received' });
+      }
 
-    res.json(uploaded);
-  } catch (err: any) {
-    res.status(500).json({ message: err.message || 'Media upload failed' });
-  }
+      const uploaded = files.map((f) => {
+        const ext = path.extname(f.originalname).toLowerCase();
+        const isVideo = f.mimetype.startsWith('video/') || allowedVideoExts.includes(ext);
+        return {
+          url: `/uploads/${f.filename}`,
+          fileName: f.filename,
+          originalName: f.originalname,
+          mimeType: f.mimetype || (isVideo ? 'video/mp4' : 'image/jpeg'),
+          size: f.size,
+          type: isVideo ? 'video' : 'image',
+        };
+      });
+
+      return res.json(uploaded);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || 'Error processing media files' });
+    }
+  });
 });
 
 // GET /api/social-media - List posts with filters
