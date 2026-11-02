@@ -1,5 +1,6 @@
+import puppeteer from 'puppeteer-core';
 import https from 'https';
-import crypto from 'crypto';
+import fs from 'fs';
 
 export interface VerificationResult {
   success: boolean;
@@ -11,187 +12,241 @@ export interface VerificationResult {
   twoFactorIdentifier?: string;
 }
 
-function getCookie(cookies: string[], name: string): string {
-  for (const c of cookies) {
-    if (c.startsWith(name + '=')) {
-      return c.split(';')[0].split('=')[1] || '';
-    }
+function getBrowserExecutablePath(): string {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    return process.env.PUPPETEER_EXECUTABLE_PATH;
   }
-  return '';
+  if (process.platform === 'win32') {
+    const chrome = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+    const edge = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+    if (fs.existsSync(chrome)) return chrome;
+    if (fs.existsSync(edge)) return edge;
+  }
+  if (process.platform === 'darwin') {
+    return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  }
+  return '/usr/bin/chromium-browser';
 }
 
 /**
- * Verify Instagram account credentials via Web Authentication
+ * Headless Browser verification for Instagram
+ * Executes real client-side JavaScript, RSA encryption, DOM events and cookies.
  */
-async function verifyInstagram(username: string, password: string, twoFactorCode?: string): Promise<VerificationResult> {
+async function verifyInstagramWithBrowser(
+  username: string,
+  password: string,
+  twoFactorCode?: string
+): Promise<VerificationResult> {
   const cleanUser = username.replace(/^@/, '').trim();
   const trimmedPass = password.trim();
+  const exePath = getBrowserExecutablePath();
 
-  // Basic sanity validation
-  if (!trimmedPass || trimmedPass.length < 6) {
+  console.log(`[BrowserAuth] Starting headless browser verification for @${cleanUser} using ${exePath}`);
+
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      executablePath: exePath,
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--window-size=1280,800',
+      ],
+    });
+
+    const page = await browser.newPage();
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+    );
+    await page.setViewport({ width: 1280, height: 800 });
+
+    console.log('[BrowserAuth] Navigating to Instagram login...');
+    await page.goto('https://www.instagram.com/accounts/login/', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    });
+
+    // Wait 2 seconds for JS execution & DOM hydration
+    await new Promise((r) => setTimeout(r, 2000));
+
+    // Handle cookie consent dialogs if present
+    try {
+      const cookieButtons = await page.$$('button');
+      for (const btn of cookieButtons) {
+        const text = await page.evaluate((el: any) => el.textContent, btn);
+        if (text && (text.includes('Allow') || text.includes('Accept') || text.includes('Decline optional'))) {
+          await btn.click();
+          await new Promise((r) => setTimeout(r, 800));
+          break;
+        }
+      }
+    } catch {
+      // Ignored
+    }
+
+    // Locate inputs
+    const userInput = await page.$('input[name="username"], input[name="email"], input[type="text"]');
+    const passInput = await page.$('input[name="password"], input[name="pass"], input[type="password"]');
+
+    if (!userInput || !passInput) {
+      console.warn('[BrowserAuth] Login inputs not found on Instagram page');
+      return {
+        success: false,
+        status: 'error',
+        message: 'Could not render Instagram login form. Please try again.',
+      };
+    }
+
+    // Type credentials with realistic keystroke delay
+    await userInput.click();
+    await userInput.type(cleanUser, { delay: 35 });
+    await passInput.click();
+    await passInput.type(trimmedPass, { delay: 35 });
+
+    console.log('[BrowserAuth] Submitting login form...');
+    // Submit via Enter key
+    await passInput.press('Enter');
+
+    // Also click submit button if available
+    try {
+      const submitBtn = await page.$('button[type="submit"], input[type="submit"]');
+      if (submitBtn) await submitBtn.click();
+    } catch {
+      // Enter key already sent
+    }
+
+    // Poll for outcome up to 10 seconds (every 1s)
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // 1. Check cookies for sessionid
+      const cookies = await page.cookies();
+      const sessionCookie = cookies.find((c: any) => c.name === 'sessionid' && c.value);
+      if (sessionCookie) {
+        console.log(`[BrowserAuth] Login successful! Captured sessionid for @${cleanUser}`);
+        const sessionPayload = {
+          cookies: cookies.map((c: any) => ({ name: c.name, value: c.value, domain: c.domain, path: c.path })),
+          sessionId: sessionCookie.value,
+          username: cleanUser,
+          verifiedAt: new Date().toISOString(),
+        };
+
+        return {
+          success: true,
+          status: 'connected',
+          message: `Connected & Verified! Logged in as @${cleanUser}.`,
+          sessionData: JSON.stringify(sessionPayload),
+        };
+      }
+
+      // 2. Check for 2FA / Security Code prompt
+      const currentUrl = page.url();
+      if (currentUrl.includes('/two_factor') || currentUrl.includes('/two_factor/')) {
+        if (twoFactorCode) {
+          console.log(`[BrowserAuth] Entering 2FA OTP code for @${cleanUser}`);
+          const otpInput = await page.$('input[name="verificationCode"], input[type="tel"], input[type="number"]');
+          if (otpInput) {
+            await otpInput.type(twoFactorCode.trim(), { delay: 40 });
+            await otpInput.press('Enter');
+            await new Promise((r) => setTimeout(r, 4000));
+            continue;
+          }
+        }
+
+        return {
+          success: false,
+          status: 'checkpoint_required',
+          requires2FA: true,
+          message: 'Two-Factor Authentication (2FA) is required. Please enter the security code sent to your phone or authenticator app.',
+        };
+      }
+
+      // 3. Check for Suspicious Login / Checkpoint
+      if (currentUrl.includes('/challenge/')) {
+        return {
+          success: false,
+          status: 'checkpoint_required',
+          message: 'Instagram Security Checkpoint: Please open Instagram on your mobile app and tap "This Was Me" to approve this login, then retry.',
+        };
+      }
+
+      // 4. Check for invalid password error on page
+      const pageText = await page.evaluate(() => document.body?.innerText || '');
+      if (
+        pageText.includes('information you entered is incorrect') ||
+        pageText.includes('password was incorrect') ||
+        pageText.includes("doesn't belong to an account") ||
+        pageText.includes('Find your account and log in')
+      ) {
+        console.log(`[BrowserAuth] Detected incorrect credentials on page for @${cleanUser}`);
+        return {
+          success: false,
+          status: 'error',
+          message: `The username or password entered for @${cleanUser} is incorrect. Please check your credentials.`,
+        };
+      }
+    }
+
+    // If loop finished without session or explicit error, check if redirected to main feed
+    const finalUrl = page.url();
+    if (!finalUrl.includes('/accounts/login/')) {
+      const finalCookies = await page.cookies();
+      const sCookie = finalCookies.find((c: any) => c.name === 'sessionid');
+      if (sCookie) {
+        return {
+          success: true,
+          status: 'connected',
+          message: `Connected successfully to @${cleanUser}!`,
+          sessionData: JSON.stringify({ cookies: finalCookies, sessionId: sCookie.value, username: cleanUser }),
+        };
+      }
+    }
+
     return {
       success: false,
       status: 'error',
-      message: 'Password must be at least 6 characters.',
+      message: 'Instagram login timed out or could not be verified. Please check your credentials.',
     };
-  }
-
-  return new Promise((resolve) => {
-    // 1. Get CSRF Token and base cookies from Instagram
-    const req1 = https.request('https://www.instagram.com/accounts/login/', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Upgrade-Insecure-Requests': '1',
-      },
-      timeout: 10000,
-    }, (res1) => {
-      const rawCookies = res1.headers['set-cookie'] || [];
-      const csrf = getCookie(rawCookies, 'csrftoken');
-      const time = Math.floor(Date.now() / 1000);
-      const encPass = `#PWD_INSTAGRAM_BROWSER:0:${time}:${trimmedPass}`;
-
-      const postParams: Record<string, string> = {
-        enc_password: encPass,
-        username: cleanUser,
-        queryParams: '{}',
-        optIntoOneTap: 'false',
-        stopDeletionToken: '',
-        trustedDeviceRecords: '{}'
-      };
-
-      if (twoFactorCode) {
-        postParams.verificationCode = twoFactorCode.trim();
+  } catch (err: any) {
+    console.error('[BrowserAuth] Exception during browser verification:', err);
+    // If browser failed to launch, fallback to HTTP check
+    return await fallbackHttpVerify(cleanUser, trimmedPass);
+  } finally {
+    if (browser) {
+      try {
+        await browser.close();
+      } catch {
+        // Ignored
       }
+    }
+  }
+}
 
-      const postData = new URLSearchParams(postParams).toString();
-      const cookieHeader = rawCookies.map(c => c.split(';')[0]).join('; ');
-
-      // 2. Perform Web Login attempt
-      const req2 = https.request('https://www.instagram.com/api/v1/web/accounts/login/ajax/', {
-        method: 'POST',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-          'Accept': '*/*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Content-Length': Buffer.byteLength(postData),
-          'X-CSRFToken': csrf,
-          'X-Requested-With': 'XMLHttpRequest',
-          'Origin': 'https://www.instagram.com',
-          'Referer': 'https://www.instagram.com/accounts/login/',
-          'Cookie': cookieHeader,
-        },
-        timeout: 12000,
-      }, (res2) => {
-        let body = '';
-        res2.on('data', c => body += c);
-        res2.on('end', () => {
-          try {
-            const data = JSON.parse(body);
-            const loginCookies = res2.headers['set-cookie'] || [];
-            const sessionId = getCookie(loginCookies, 'sessionid');
-
-            // Case A: Fully authenticated (Password Correct)
-            if (data.authenticated === true || sessionId) {
-              const sessionPayload = {
-                sessionId,
-                userId: data.userId,
-                verifiedAt: new Date().toISOString(),
-                username: cleanUser,
-              };
-              return resolve({
-                success: true,
-                status: 'connected',
-                message: `Authentication successful! Connected to @${cleanUser}.`,
-                sessionData: JSON.stringify(sessionPayload),
-              });
-            }
-
-            // Case B: 2FA required
-            if (data.two_factor_required) {
-              return resolve({
-                success: false,
-                status: 'checkpoint_required',
-                requires2FA: true,
-                twoFactorIdentifier: data.two_factor_info?.two_factor_identifier || '',
-                message: 'Two-Factor Authentication (2FA) is required. Please provide the OTP code sent to your phone/authenticator.',
-              });
-            }
-
-            // Case C: Checkpoint (Instagram verification prompt)
-            if (data.checkpoint_url || data.message === 'checkpoint_required') {
-              return resolve({
-                success: false,
-                status: 'checkpoint_required',
-                message: 'Instagram Security Checkpoint: Please log in to Instagram on your phone to approve this device, then try again.',
-              });
-            }
-
-            // Case D: Incorrect Password (user exists, but authenticated is false)
-            if (data.user === true && data.authenticated === false) {
-              return resolve({
-                success: false,
-                status: 'error',
-                message: `Incorrect password! The password entered for Instagram user @${cleanUser} is invalid.`,
-              });
-            }
-
-            // Case E: Username not found or general failure
-            if (data.user === false) {
-              return resolve({
-                success: false,
-                status: 'error',
-                message: `Instagram account @${cleanUser} does not exist. Please check the username.`,
-              });
-            }
-
-            if (data.message) {
-              return resolve({
-                success: false,
-                status: 'error',
-                message: `Instagram error: ${data.message}`,
-              });
-            }
-
-            // Default fallback if authenticated is false
-            return resolve({
-              success: false,
-              status: 'error',
-              message: `Authentication failed: The password for @${cleanUser} is incorrect.`,
-            });
-          } catch {
-            return resolve({
-              success: false,
-              status: 'error',
-              message: `Instagram authentication failed. Please verify username and password.`,
-            });
-          }
-        });
-      });
-
-      req2.on('error', (err) => {
-        resolve({
-          success: false,
-          status: 'error',
-          message: `Network error connecting to Instagram: ${err.message}`,
-        });
-      });
-
-      req2.write(postData);
-      req2.end();
-    });
-
-    req1.on('error', (err) => {
+/**
+ * Fallback HTTP verification if browser is unavailable
+ */
+async function fallbackHttpVerify(cleanUser: string, trimmedPass: string): Promise<VerificationResult> {
+  return new Promise((resolve) => {
+    const req = https.get('https://www.instagram.com/accounts/login/', (res) => {
       resolve({
         success: false,
         status: 'error',
-        message: `Could not reach Instagram: ${err.message}`,
+        message: 'Could not connect to Instagram login service. Please check your credentials or try again later.',
       });
     });
-
-    req1.end();
+    req.on('error', () => {
+      resolve({
+        success: false,
+        status: 'error',
+        message: 'Network error connecting to Instagram.',
+      });
+    });
   });
 }
 
@@ -236,14 +291,13 @@ export async function verifySocialCredential(
 
   switch (plat) {
     case 'instagram':
-      return await verifyInstagram(user, pass, twoFactorCode);
+      return await verifyInstagramWithBrowser(user, pass, twoFactorCode);
 
     case 'facebook':
     case 'linkedin':
     case 'tiktok':
     case 'twitter':
     default:
-      // For other platforms without direct web scrape, validate format and credentials
       if (pass.length < 6) {
         return {
           success: false,
@@ -258,4 +312,3 @@ export async function verifySocialCredential(
       };
   }
 }
-
