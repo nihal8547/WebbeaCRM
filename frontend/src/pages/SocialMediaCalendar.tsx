@@ -14,6 +14,7 @@ import {
   Link as LinkIcon, MoveLeft, MoveRight, Maximize2, Upload,
   Send, RefreshCw, KeyRound, AlertTriangle
 } from 'lucide-react';
+import PlatformIcon from '../components/PlatformIcon';
 
 export interface MediaItem {
   url: string;
@@ -89,14 +90,14 @@ interface LightboxState {
 }
 
 const AVAILABLE_PLATFORMS = [
-  { id: 'instagram', name: 'Instagram', color: 'bg-gradient-to-tr from-amber-500 via-pink-600 to-purple-600 text-white', icon: '📸' },
-  { id: 'facebook', name: 'Facebook', color: 'bg-blue-600 text-white', icon: '👥' },
-  { id: 'linkedin', name: 'LinkedIn', color: 'bg-sky-700 text-white', icon: '💼' },
-  { id: 'twitter', name: 'X / Twitter', color: 'bg-neutral-900 text-white', icon: '𝕏' },
-  { id: 'tiktok', name: 'TikTok', color: 'bg-black text-cyan-400', icon: '🎵' },
-  { id: 'youtube', name: 'YouTube', color: 'bg-red-600 text-white', icon: '▶️' },
-  { id: 'pinterest', name: 'Pinterest', color: 'bg-rose-600 text-white', icon: '📌' },
-  { id: 'threads', name: 'Threads', color: 'bg-slate-800 text-white', icon: '🧵' },
+  { id: 'instagram', name: 'Instagram', color: 'bg-gradient-to-tr from-amber-500 via-pink-600 to-purple-600 text-white' },
+  { id: 'facebook', name: 'Facebook', color: 'bg-blue-600 text-white' },
+  { id: 'linkedin', name: 'LinkedIn', color: 'bg-sky-700 text-white' },
+  { id: 'twitter', name: 'X / Twitter', color: 'bg-neutral-900 text-white' },
+  { id: 'tiktok', name: 'TikTok', color: 'bg-neutral-900 text-cyan-400' },
+  { id: 'youtube', name: 'YouTube', color: 'bg-red-600 text-white' },
+  { id: 'pinterest', name: 'Pinterest', color: 'bg-rose-600 text-white' },
+  { id: 'threads', name: 'Threads', color: 'bg-slate-800 text-white' },
 ];
 
 const POST_TYPES = [
@@ -239,7 +240,7 @@ export default function SocialMediaCalendar() {
     mutationFn: (id: number) => api.post(`/social-media/${id}/publish-now`),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['social-posts'] });
-      toast.success(res.data?.message || 'Published to target accounts!', { icon: '🚀' });
+      toast.success(res.data?.message || 'Published to target accounts!');
       if (res.data?.post) {
         setActivePostDetails(res.data.post);
       }
@@ -329,7 +330,7 @@ export default function SocialMediaCalendar() {
       });
 
       if (hasVideo) {
-        toast.success(`${newMediaItems.length} media file(s) uploaded. Type updated to Reel/Video.`, { icon: '🎬' });
+        toast.success(`${newMediaItems.length} media file(s) uploaded. Type updated to Reel/Video.`);
       } else {
         toast.success(`${newMediaItems.length} media file(s) uploaded successfully`);
       }
@@ -642,7 +643,7 @@ export default function SocialMediaCalendar() {
               aria-label="Filter by Client"
               className="form-input text-sm font-medium py-1.5"
             >
-              <option value="all">🌐 All Clients ({clients.length})</option>
+              <option value="all">All Clients ({clients.length})</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} {c.company ? `(${c.company})` : ''}
@@ -668,13 +669,13 @@ export default function SocialMediaCalendar() {
               <button
                 key={plat.id}
                 onClick={() => setSelectedPlatformFilter(plat.id)}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 transition-all ${
+                className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
                   selectedPlatformFilter === plat.id
                     ? 'ring-2 ring-blue-500 font-bold ' + plat.color
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                <span>{plat.icon}</span>
+                <PlatformIcon platform={plat.id} size={13} />
                 <span>{plat.name}</span>
               </button>
             ))}
@@ -904,10 +905,10 @@ export default function SocialMediaCalendar() {
                                 return pCfg ? (
                                   <span
                                     key={platId}
-                                    className={`text-[9px] px-1 py-0.2 rounded font-bold ${pCfg.color}`}
+                                    className={`p-0.5 rounded font-bold ${pCfg.color}`}
                                     title={pCfg.name}
                                   >
-                                    {pCfg.icon}
+                                    <PlatformIcon platform={platId} size={9} />
                                   </span>
                                 ) : null;
                               })}
@@ -923,7 +924,7 @@ export default function SocialMediaCalendar() {
                                       : 'bg-indigo-100 text-indigo-700'
                                   }`}
                                 >
-                                  {post.publishStatus === 'published' ? '✓ Live' : '⚡ Auto'}
+                                  {post.publishStatus === 'published' ? 'Live' : 'Auto'}
                                 </span>
                               )}
                               <span className="text-[10px] text-gray-500 font-medium">
@@ -1093,9 +1094,10 @@ export default function SocialMediaCalendar() {
                           return pCfg ? (
                             <span
                               key={platId}
-                              className={`text-[10px] px-2 py-0.5 rounded-md font-semibold ${pCfg.color}`}
+                              className={`text-[10px] px-2 py-0.5 rounded-md font-semibold flex items-center gap-1 ${pCfg.color}`}
                             >
-                              {pCfg.icon} {pCfg.name}
+                              <PlatformIcon platform={platId} size={11} />
+                              <span>{pCfg.name}</span>
                             </span>
                           ) : null;
                         })}
@@ -1400,7 +1402,6 @@ export default function SocialMediaCalendar() {
                       {targetCreds.length > 0 && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {targetCreds.map((cred) => {
-                            const pCfg = AVAILABLE_PLATFORMS.find((p) => p.id === (cred.platform || 'instagram').toLowerCase());
                             return (
                               <div
                                 key={cred.id}
@@ -1408,7 +1409,7 @@ export default function SocialMediaCalendar() {
                               >
                                 <div className="flex items-center gap-2 min-w-0">
                                   <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center text-xs shrink-0">
-                                    {pCfg?.icon || '🌐'}
+                                    <PlatformIcon platform={cred.platform} size={15} />
                                   </div>
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1.5">
@@ -1437,7 +1438,7 @@ export default function SocialMediaCalendar() {
                               key={platId}
                               className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs ${pCfg.color}`}
                             >
-                              <span>{pCfg.icon}</span>
+                              <PlatformIcon platform={platId} size={13} />
                               <span>{pCfg.name}</span>
                             </div>
                           ) : null;
@@ -1479,8 +1480,8 @@ export default function SocialMediaCalendar() {
                                 <span className="truncate block font-medium text-slate-200">
                                   {media.originalName}
                                 </span>
-                                <span className="text-[10px] text-rose-400 font-semibold">
-                                  🎬 Video {media.size ? `• ${formatFileSize(media.size)}` : ''}
+                                <span className="text-[10px] text-rose-400 font-semibold flex items-center gap-1">
+                                  <Film size={10} /> Video {media.size ? `• ${formatFileSize(media.size)}` : ''}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
@@ -1527,8 +1528,8 @@ export default function SocialMediaCalendar() {
                                 <span className="truncate block font-medium text-slate-200">
                                   {media.originalName}
                                 </span>
-                                <span className="text-[10px] text-blue-400 font-semibold">
-                                  🖼️ Image {media.size ? `• ${formatFileSize(media.size)}` : ''}
+                                <span className="text-[10px] text-blue-400 font-semibold flex items-center gap-1">
+                                  <ImageIcon size={10} /> Image {media.size ? `• ${formatFileSize(media.size)}` : ''}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
@@ -1672,8 +1673,9 @@ export default function SocialMediaCalendar() {
                 <span className="text-sm font-semibold truncate max-w-[280px] sm:max-w-md text-gray-200">
                   {currentMedia.originalName}
                 </span>
-                <span className={`text-[11px] px-2 py-0.5 rounded font-bold uppercase ${isVideo ? 'bg-rose-600 text-white' : 'bg-blue-600 text-white'}`}>
-                  {isVideo ? '🎬 Video' : '🖼️ Image'}
+                <span className={`text-[11px] px-2 py-0.5 rounded font-bold uppercase flex items-center gap-1 ${isVideo ? 'bg-rose-600 text-white' : 'bg-blue-600 text-white'}`}>
+                  {isVideo ? <Film size={11} /> : <ImageIcon size={11} />}
+                  <span>{isVideo ? 'Video' : 'Image'}</span>
                 </span>
                 {currentMedia.size && (
                   <span className="text-xs text-gray-400 hidden sm:inline">
@@ -1853,9 +1855,9 @@ export default function SocialMediaCalendar() {
                         {formClient.name} {formClient.company ? `• ${formClient.company}` : ''}
                       </p>
                       <div className="flex items-center gap-3 text-gray-600 flex-wrap">
-                        <span>📞 {formClient.phone}</span>
-                        {formClient.email && <span>✉️ {formClient.email}</span>}
-                        {formClient.address && <span>📍 {formClient.address}</span>}
+                        <span className="flex items-center gap-1"><Phone size={12} className="text-gray-400" /> {formClient.phone}</span>
+                        {formClient.email && <span className="flex items-center gap-1"><Mail size={12} className="text-gray-400" /> {formClient.email}</span>}
+                        {formClient.address && <span className="flex items-center gap-1"><MapPin size={12} className="text-gray-400" /> {formClient.address}</span>}
                       </div>
                       {formClient.notes && (
                         <p className="text-gray-500 italic mt-0.5">Notes: {formClient.notes}</p>
@@ -1946,7 +1948,6 @@ export default function SocialMediaCalendar() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {currentClientCreds.map((cred) => {
                           const isSelected = form.targetAccountIds.includes(cred.id);
-                          const pCfg = AVAILABLE_PLATFORMS.find((p) => p.id === (cred.platform || 'instagram').toLowerCase());
                           return (
                             <div
                               key={cred.id}
@@ -1959,7 +1960,7 @@ export default function SocialMediaCalendar() {
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                                  {pCfg?.icon || '🌐'}
+                                  <PlatformIcon platform={cred.platform} size={16} />
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5">
@@ -2060,7 +2061,7 @@ export default function SocialMediaCalendar() {
                                   : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100'
                               }`}
                             >
-                              <span>{plat.icon}</span>
+                              <PlatformIcon platform={plat.id} size={13} />
                               <span>{plat.name}</span>
                               {isSelected && <Check size={12} className="text-blue-600 ml-0.5" />}
                             </button>
@@ -2251,8 +2252,8 @@ export default function SocialMediaCalendar() {
                         MP4, MOV, WEBM up to 150MB • Reels, Shorts, TikToks & Video Posts
                       </p>
                       <div className="mt-2 flex items-center gap-2 text-[10px] text-rose-600 font-medium">
-                        <span className="px-2 py-0.5 rounded bg-rose-100/70 border border-rose-200">🎬 Reels & Shorts (9:16)</span>
-                        <span className="px-2 py-0.5 rounded bg-rose-100/70 border border-rose-200">🎥 Landscape Video (16:9)</span>
+                        <span className="px-2 py-0.5 rounded bg-rose-100/70 border border-rose-200 flex items-center gap-1"><Film size={10} /> Reels & Shorts (9:16)</span>
+                        <span className="px-2 py-0.5 rounded bg-rose-100/70 border border-rose-200 flex items-center gap-1"><VideoIcon size={10} /> Landscape Video (16:9)</span>
                       </div>
                     </label>
                   </div>
@@ -2279,8 +2280,8 @@ export default function SocialMediaCalendar() {
                           onChange={(e) => setUrlMediaType(e.target.value as 'image' | 'video')}
                           className="form-input text-xs mt-1 font-medium"
                         >
-                          <option value="image">🖼️ Image</option>
-                          <option value="video">🎬 Video</option>
+                          <option value="image">Image (Photo)</option>
+                          <option value="video">Video (Reel / Stream)</option>
                         </select>
                       </div>
                     </div>
@@ -2345,8 +2346,8 @@ export default function SocialMediaCalendar() {
                                   <Play size={14} fill="white" className="ml-0.5" />
                                 </div>
                               </div>
-                              <span className="absolute bottom-1 left-1 bg-rose-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
-                                🎬 Video
+                              <span className="absolute bottom-1 left-1 bg-rose-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow flex items-center gap-1">
+                                <Film size={10} /> Video
                               </span>
                             </div>
                           ) : (
@@ -2359,8 +2360,8 @@ export default function SocialMediaCalendar() {
                                 alt={media.originalName}
                                 className="w-full h-full object-cover"
                               />
-                              <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] font-medium px-1.5 py-0.5 rounded shadow">
-                                🖼️ Image
+                              <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] font-medium px-1.5 py-0.5 rounded shadow flex items-center gap-1">
+                                <ImageIcon size={10} /> Image
                               </span>
                             </div>
                           )}

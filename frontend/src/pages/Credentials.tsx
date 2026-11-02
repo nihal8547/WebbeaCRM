@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import SlidePanel from '../components/SlidePanel';
 import { useAuth } from '../contexts/AuthContext';
+import PlatformIcon from '../components/PlatformIcon';
 
 interface Client {
   id: number; name: string; company?: string; email?: string; phone: string;
@@ -48,40 +49,34 @@ export interface Credential {
   client?: { id: number; name: string; company?: string };
 }
 
-const PLATFORM_CONFIG: Record<string, { label: string; icon: string; color: string; defaultUrl: (u: string) => string }> = {
+const PLATFORM_CONFIG: Record<string, { label: string; color: string; defaultUrl: (u: string) => string }> = {
   instagram: {
     label: 'Instagram',
-    icon: '📸',
     color: 'bg-gradient-to-tr from-amber-500 via-pink-600 to-purple-600 text-white',
     defaultUrl: (u) => `https://instagram.com/${u.replace(/^@/, '')}`,
   },
   facebook: {
     label: 'Facebook',
-    icon: '👥',
     color: 'bg-blue-600 text-white',
     defaultUrl: (u) => `https://facebook.com/${u}`,
   },
   linkedin: {
     label: 'LinkedIn',
-    icon: '💼',
     color: 'bg-sky-700 text-white',
     defaultUrl: (u) => `https://linkedin.com/company/${u}`,
   },
   tiktok: {
     label: 'TikTok',
-    icon: '🎵',
     color: 'bg-neutral-900 text-cyan-400',
     defaultUrl: (u) => `https://tiktok.com/@${u.replace(/^@/, '')}`,
   },
   twitter: {
     label: 'X / Twitter',
-    icon: '𝕏',
     color: 'bg-black text-white',
     defaultUrl: (u) => `https://x.com/${u.replace(/^@/, '')}`,
   },
   other: {
     label: 'Website / Other',
-    icon: '🌐',
     color: 'bg-slate-700 text-white',
     defaultUrl: () => '',
   },
@@ -347,8 +342,8 @@ export default function Credentials() {
                         <div key={cred.id} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3 shadow-xs hover:border-indigo-300 transition-all">
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-xs ${pCfg.color}`}>
-                                {pCfg.icon}
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-xs ${pCfg.color}`}>
+                                <PlatformIcon platform={cred.platform} size={20} />
                               </div>
                               <div>
                                 <div className="flex items-center gap-2">
@@ -572,8 +567,10 @@ export default function Credentials() {
                         : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'
                     }`}
                   >
-                    <span className="text-lg">{pVal.icon}</span>
-                    <span className="text-[11px] truncate">{pVal.label}</span>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${pVal.color} shadow-2xs`}>
+                      <PlatformIcon platform={pKey} size={16} />
+                    </div>
+                    <span className="text-[11px] truncate font-semibold">{pVal.label}</span>
                   </button>
                 );
               })}
