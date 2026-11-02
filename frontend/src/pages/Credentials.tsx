@@ -132,14 +132,14 @@ export default function Credentials() {
   const save = useMutation({
     mutationFn: (data: any) =>
       editingCred ? api.put(`/credentials/${editingCred.id}`, data) : api.post('/credentials', data),
-    onSuccess: () => {
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['credentials', selectedClient?.id] });
-      toast.success(editingCred ? 'Account updated' : 'Account connected successfully');
+      toast.success(res.data?.message || (editingCred ? 'Account updated' : 'Account connected successfully'));
       setCredPanel(false);
       setEditingCred(null);
       setForm({ ...emptyForm });
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save account'),
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save account', { duration: 6000 }),
   });
 
   const del = useMutation({
@@ -155,10 +155,11 @@ export default function Credentials() {
     try {
       setTestingId(id);
       const res = await api.post(`/credentials/${id}/test-connection`);
-      toast.success(res.data.message || 'Connection verified and active!');
+      toast.success(res.data.message || 'Connection verified and active!', { duration: 5000 });
       qc.invalidateQueries({ queryKey: ['credentials', selectedClient?.id] });
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Connection test failed');
+      toast.error(err?.response?.data?.message || 'Connection test failed: Incorrect password or credentials', { duration: 6000 });
+      qc.invalidateQueries({ queryKey: ['credentials', selectedClient?.id] });
     } finally {
       setTestingId(null);
     }
@@ -352,10 +353,22 @@ export default function Credentials() {
                               <div>
                                 <div className="flex items-center gap-2">
                                   <p className="font-bold text-gray-900 text-sm">{cred.label}</p>
-                                  <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    Connected
-                                  </span>
+                                  {cred.status === 'error' ? (
+                                    <span className="badge bg-rose-50 text-rose-700 border border-rose-200 text-[10px] flex items-center gap-1 font-semibold">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                      Invalid Password / Failed
+                                    </span>
+                                  ) : cred.status === 'checkpoint_required' ? (
+                                    <span className="badge bg-amber-50 text-amber-700 border border-amber-200 text-[10px] flex items-center gap-1 font-semibold">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                      2FA / Security Checkpoint
+                                    </span>
+                                  ) : (
+                                    <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] flex items-center gap-1 font-semibold">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                      Connected & Verified
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2 mt-0.5">
                                   <span className="text-xs font-mono font-medium text-gray-600">

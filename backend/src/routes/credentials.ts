@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { encrypt, decrypt } from '../lib/crypto';
+import { verifySocialCredential } from '../services/credentialVerifier';
 
 const router = Router();
 router.use(authenticate);
@@ -32,25 +33,42 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 // POST /credentials
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { clientId, label, platform = 'instagram', url, username, password, notes } = req.body;
+    const { clientId, label, platform = 'instagram', url, username, password, notes, otpCode } = req.body;
     if (!clientId || !label || !username || !password) {
       return res.status(400).json({ message: 'clientId, label, username, password are required' });
     }
+
+    const cleanUser = String(username).trim();
+    const plat = String(platform).toLowerCase();
+
+    // Verify credentials against social platform
+    const verification = await verifySocialCredential(plat, cleanUser, String(password), otpCode);
+    if (!verification.success) {
+      return res.status(400).json({
+        success: false,
+        status: verification.status,
+        message: verification.message,
+        requires2FA: verification.requires2FA,
+        twoFactorIdentifier: verification.twoFactorIdentifier,
+      });
+    }
+
     const cred = await prisma.credential.create({
       data: {
         clientId: Number(clientId),
         label: String(label).trim(),
-        platform: String(platform).toLowerCase(),
-        url: url ? String(url).trim() : null,
-        username: String(username).trim(),
+        platform: plat,
+        url: url ? String(url).trim() : (plat === 'instagram' ? `https://instagram.com/${cleanUser.replace(/^@/, '')}` : null),
+        username: cleanUser,
         password: encrypt(String(password)),
-        status: 'connected',
+        sessionData: verification.sessionData ? encrypt(verification.sessionData) : null,
+        status: verification.status,
         lastChecked: new Date(),
         notes: notes ? String(notes).trim() : null,
       },
       include: { client: { select: { id: true, name: true, company: true } } },
     });
-    res.status(201).json({ ...cred, password: String(password) });
+    res.status(201).json({ ...cred, password: String(password), message: verification.message });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
@@ -65,21 +83,31 @@ router.post('/connect', async (req: AuthRequest, res: Response) => {
     }
 
     const cleanUser = String(username).trim();
-    const cleanLabel = label ? String(label).trim() : `@${cleanUser.replace(/^@/, '')} (${platform})`;
+    const plat = String(platform).toLowerCase();
+    const cleanLabel = label ? String(label).trim() : `@${cleanUser.replace(/^@/, '')} (${plat})`;
 
-    // Check if 2FA code is needed or supplied
-    const sessionToken = `session_${Date.now()}_${Buffer.from(cleanUser).toString('hex').slice(0, 8)}`;
+    // Verify credentials against social platform
+    const verification = await verifySocialCredential(plat, cleanUser, String(password), otpCode);
+    if (!verification.success) {
+      return res.status(400).json({
+        success: false,
+        status: verification.status,
+        message: verification.message,
+        requires2FA: verification.requires2FA,
+        twoFactorIdentifier: verification.twoFactorIdentifier,
+      });
+    }
 
     const cred = await prisma.credential.create({
       data: {
         clientId: Number(clientId),
         label: cleanLabel,
-        platform: String(platform).toLowerCase(),
-        url: url ? String(url).trim() : (platform === 'instagram' ? `https://instagram.com/${cleanUser.replace(/^@/, '')}` : null),
+        platform: plat,
+        url: url ? String(url).trim() : (plat === 'instagram' ? `https://instagram.com/${cleanUser.replace(/^@/, '')}` : null),
         username: cleanUser,
         password: encrypt(String(password)),
-        sessionData: encrypt(JSON.stringify({ token: sessionToken, verifiedAt: new Date().toISOString() })),
-        status: 'connected',
+        sessionData: verification.sessionData ? encrypt(verification.sessionData) : null,
+        status: verification.status,
         lastChecked: new Date(),
         notes: notes ? String(notes).trim() : null,
       },
@@ -89,7 +117,7 @@ router.post('/connect', async (req: AuthRequest, res: Response) => {
     res.status(201).json({
       ...cred,
       password: String(password),
-      message: `${platform.toUpperCase()} account successfully connected!`,
+      message: verification.message,
     });
   } catch (err: any) {
     res.status(500).json({ message: err.message || 'Failed to connect social account' });
@@ -103,20 +131,37 @@ router.post('/:id/test-connection', async (req: AuthRequest, res: Response) => {
     const cred = await prisma.credential.findUnique({ where: { id } });
     if (!cred) return res.status(404).json({ message: 'Account not found' });
 
-    // Update last checked and ensure status is connected
+    const decryptedPassword = safeDecrypt(cred.password);
+    const verification = await verifySocialCredential(
+      cred.platform || 'instagram',
+      cred.username,
+      decryptedPassword
+    );
+
+    // Update last checked and verified status in database
     const updated = await prisma.credential.update({
       where: { id },
       data: {
-        status: 'connected',
+        status: verification.status,
         lastChecked: new Date(),
+        sessionData: verification.sessionData ? encrypt(verification.sessionData) : undefined,
       },
     });
+
+    if (!verification.success) {
+      return res.status(400).json({
+        success: false,
+        status: verification.status,
+        lastChecked: updated.lastChecked,
+        message: verification.message,
+      });
+    }
 
     res.json({
       success: true,
       status: 'connected',
       lastChecked: updated.lastChecked,
-      message: `Connection to @${cred.username} is active and verified.`,
+      message: verification.message,
     });
   } catch (err: any) {
     res.status(500).json({ message: err.message || 'Connection test failed' });
@@ -127,8 +172,23 @@ router.post('/:id/test-connection', async (req: AuthRequest, res: Response) => {
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { label, platform, url, username, password, status, notes } = req.body;
+    const id = Number(req.params.id);
+
+    if (password) {
+      const existing = await prisma.credential.findUnique({ where: { id } });
+      const plat = platform ? String(platform).toLowerCase() : (existing?.platform || 'instagram');
+      const usr = username ? String(username).trim() : (existing?.username || '');
+      const verification = await verifySocialCredential(plat, usr, String(password));
+      if (!verification.success) {
+        return res.status(400).json({
+          message: verification.message,
+          status: verification.status,
+        });
+      }
+    }
+
     const cred = await prisma.credential.update({
-      where: { id: Number(req.params.id) },
+      where: { id },
       data: {
         label: label ? String(label).trim() : undefined,
         platform: platform ? String(platform).toLowerCase() : undefined,
