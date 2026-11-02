@@ -33,16 +33,17 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 // POST /credentials
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { clientId, label, platform = 'instagram', url, username, password, notes, otpCode } = req.body;
-    if (!clientId || !label || !username || !password) {
-      return res.status(400).json({ message: 'clientId, label, username, password are required' });
+    const { clientId, label, platform = 'instagram', url, username, password, notes, otpCode, sessionId } = req.body;
+    const effectivePass = password || sessionId || '';
+    if (!clientId || !label || !username || !effectivePass) {
+      return res.status(400).json({ message: 'clientId, label, username, and password or sessionId are required' });
     }
 
     const cleanUser = String(username).trim();
     const plat = String(platform).toLowerCase();
 
     // Verify credentials against social platform
-    const verification = await verifySocialCredential(plat, cleanUser, String(password), otpCode);
+    const verification = await verifySocialCredential(plat, cleanUser, String(effectivePass), otpCode, sessionId);
     if (!verification.success) {
       return res.status(400).json({
         success: false,
@@ -60,7 +61,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         platform: plat,
         url: url ? String(url).trim() : (plat === 'instagram' ? `https://instagram.com/${cleanUser.replace(/^@/, '')}` : null),
         username: cleanUser,
-        password: encrypt(String(password)),
+        password: encrypt(String(effectivePass)),
         sessionData: verification.sessionData ? encrypt(verification.sessionData) : null,
         status: verification.status,
         lastChecked: new Date(),
@@ -68,7 +69,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       },
       include: { client: { select: { id: true, name: true, company: true } } },
     });
-    res.status(201).json({ ...cred, password: String(password), message: verification.message });
+    res.status(201).json({ ...cred, password: String(effectivePass), message: verification.message });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
@@ -77,9 +78,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 // POST /credentials/connect — Authenticate & Connect with optional 2FA handshake
 router.post('/connect', async (req: AuthRequest, res: Response) => {
   try {
-    const { clientId, label, platform = 'instagram', username, password, url, notes, otpCode } = req.body;
-    if (!clientId || !username || !password) {
-      return res.status(400).json({ message: 'Client ID, username, and password are required' });
+    const { clientId, label, platform = 'instagram', username, password, url, notes, otpCode, sessionId } = req.body;
+    const effectivePass = password || sessionId || '';
+    if (!clientId || !username || !effectivePass) {
+      return res.status(400).json({ message: 'Client ID, username, and password or session ID are required' });
     }
 
     const cleanUser = String(username).trim();
@@ -87,7 +89,7 @@ router.post('/connect', async (req: AuthRequest, res: Response) => {
     const cleanLabel = label ? String(label).trim() : `@${cleanUser.replace(/^@/, '')} (${plat})`;
 
     // Verify credentials against social platform
-    const verification = await verifySocialCredential(plat, cleanUser, String(password), otpCode);
+    const verification = await verifySocialCredential(plat, cleanUser, String(effectivePass), otpCode, sessionId);
     if (!verification.success) {
       return res.status(400).json({
         success: false,
@@ -105,7 +107,7 @@ router.post('/connect', async (req: AuthRequest, res: Response) => {
         platform: plat,
         url: url ? String(url).trim() : (plat === 'instagram' ? `https://instagram.com/${cleanUser.replace(/^@/, '')}` : null),
         username: cleanUser,
-        password: encrypt(String(password)),
+        password: encrypt(String(effectivePass)),
         sessionData: verification.sessionData ? encrypt(verification.sessionData) : null,
         status: verification.status,
         lastChecked: new Date(),
@@ -116,7 +118,7 @@ router.post('/connect', async (req: AuthRequest, res: Response) => {
 
     res.status(201).json({
       ...cred,
-      password: String(password),
+      password: String(effectivePass),
       message: verification.message,
     });
   } catch (err: any) {
@@ -132,10 +134,20 @@ router.post('/:id/test-connection', async (req: AuthRequest, res: Response) => {
     if (!cred) return res.status(404).json({ message: 'Account not found' });
 
     const decryptedPassword = safeDecrypt(cred.password);
+    let savedSessionId: string | undefined;
+    if (cred.sessionData) {
+      try {
+        const parsed = JSON.parse(safeDecrypt(cred.sessionData));
+        savedSessionId = parsed.sessionId;
+      } catch {}
+    }
+
     const verification = await verifySocialCredential(
       cred.platform || 'instagram',
       cred.username,
-      decryptedPassword
+      decryptedPassword,
+      undefined,
+      savedSessionId
     );
 
     // Update last checked and verified status in database
@@ -171,18 +183,20 @@ router.post('/:id/test-connection', async (req: AuthRequest, res: Response) => {
 // PUT /credentials/:id
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { label, platform, url, username, password, status, notes } = req.body;
+    const { label, platform, url, username, password, status, notes, sessionId } = req.body;
     const id = Number(req.params.id);
+    const effectivePass = password || sessionId;
 
-    if (password) {
+    let verificationResult: any = null;
+    if (effectivePass) {
       const existing = await prisma.credential.findUnique({ where: { id } });
       const plat = platform ? String(platform).toLowerCase() : (existing?.platform || 'instagram');
       const usr = username ? String(username).trim() : (existing?.username || '');
-      const verification = await verifySocialCredential(plat, usr, String(password));
-      if (!verification.success) {
+      verificationResult = await verifySocialCredential(plat, usr, String(effectivePass), undefined, sessionId);
+      if (!verificationResult.success) {
         return res.status(400).json({
-          message: verification.message,
-          status: verification.status,
+          message: verificationResult.message,
+          status: verificationResult.status,
         });
       }
     }
@@ -194,8 +208,9 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
         platform: platform ? String(platform).toLowerCase() : undefined,
         url: url !== undefined ? (url ? String(url).trim() : null) : undefined,
         username: username ? String(username).trim() : undefined,
-        password: password ? encrypt(String(password)) : undefined,
-        status: status ? String(status) : undefined,
+        password: effectivePass ? encrypt(String(effectivePass)) : undefined,
+        sessionData: verificationResult?.sessionData ? encrypt(verificationResult.sessionData) : undefined,
+        status: verificationResult ? verificationResult.status : (status ? String(status) : undefined),
         notes: notes !== undefined ? (notes ? String(notes).trim() : null) : undefined,
         lastChecked: new Date(),
       },

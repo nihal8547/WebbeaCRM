@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   KeyRound, Plus, Edit, Trash2, Eye, EyeOff, Copy, Search,
   Globe, User, Lock, ChevronRight, Briefcase,
-  CreditCard, FileText, RefreshCw,
+  CreditCard, FileText, RefreshCw, ShieldCheck, HelpCircle, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import SlidePanel from '../components/SlidePanel';
 import { useAuth } from '../contexts/AuthContext';
@@ -89,6 +89,8 @@ const emptyForm = {
   url: '',
   username: '',
   password: '',
+  sessionId: '',
+  authMethod: 'session' as 'session' | 'password',
   notes: '',
 };
 
@@ -103,6 +105,7 @@ export default function Credentials() {
   const [credPanel, setCredPanel] = useState(false);
   const [editingCred, setEditingCred] = useState<Credential | null>(null);
   const [form, setForm] = useState<typeof emptyForm>({ ...emptyForm });
+  const [showCookieGuide, setShowCookieGuide] = useState(false);
   const [revealedIds, setRevealedIds] = useState<Set<number>>(new Set());
   const [testingId, setTestingId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'credentials' | 'works' | 'payments' | 'quotations'>('credentials');
@@ -174,13 +177,16 @@ export default function Credentials() {
 
   const openEditCred = (c: Credential) => {
     setEditingCred(c);
+    const isSession = (c.password || '').includes('%3A') || (c.password || '').length > 30;
     setForm({
       clientId: String(c.clientId),
       label: c.label,
       platform: c.platform || 'instagram',
       url: c.url || '',
       username: c.username,
-      password: c.password,
+      password: isSession ? '' : c.password,
+      sessionId: isSession ? c.password : '',
+      authMethod: isSession ? 'session' : 'password',
       notes: c.notes || '',
     });
     setCredPanel(true);
@@ -540,7 +546,22 @@ export default function Credentials() {
         title={editingCred ? 'Edit Social Account' : 'Connect Social Media Account'}
         subtitle={selectedClient?.name}
       >
-        <form onSubmit={(e) => { e.preventDefault(); save.mutate(form); }} className="p-6 space-y-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const effectivePass =
+              form.platform === 'instagram' && form.authMethod === 'session'
+                ? form.sessionId || form.password
+                : form.password;
+
+            save.mutate({
+              ...form,
+              password: effectivePass,
+              sessionId: form.platform === 'instagram' && form.authMethod === 'session' ? form.sessionId || form.password : undefined,
+            });
+          }}
+          className="p-6 space-y-4"
+        >
           {/* Platform Selector */}
           <div>
             <label className="form-label font-bold text-gray-900">Select Platform *</label>
@@ -610,21 +631,118 @@ export default function Credentials() {
             </div>
           </div>
 
-          <div>
-            <label className="form-label font-semibold text-gray-900">Password *</label>
-            <input
-              className="form-input"
-              type="text"
-              placeholder="Account password (encrypted with AES-256)"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-              autoComplete="off"
-            />
-            <p className="text-[11px] text-gray-400 mt-1">
-              Passwords are military-grade AES-256 encrypted and stored safely.
-            </p>
-          </div>
+          {/* Connection Method Tabs for Instagram */}
+          {form.platform === 'instagram' ? (
+            <div className="pt-1">
+              <div className="flex border-b border-gray-200 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, authMethod: 'session' })}
+                  className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+                    form.authMethod === 'session'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <ShieldCheck size={14} />
+                  Session ID Cookie (Instant & Recommended)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, authMethod: 'password' })}
+                  className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+                    form.authMethod === 'password'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Lock size={14} />
+                  Password
+                </button>
+              </div>
+
+              {form.authMethod === 'session' ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="form-label font-semibold text-gray-900 m-0">Instagram Session ID (sessionid) *</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowCookieGuide(!showCookieGuide)}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                    >
+                      <HelpCircle size={13} />
+                      {showCookieGuide ? 'Hide instructions' : 'How to get this?'}
+                      {showCookieGuide ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                    </button>
+                  </div>
+
+                  {showCookieGuide && (
+                    <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl text-xs text-gray-700 space-y-1.5 animate-fadeIn">
+                      <p className="font-bold text-indigo-950 flex items-center gap-1.5">
+                        <ShieldCheck size={14} className="text-indigo-600" />
+                        How to get your Instagram Session ID in 30 seconds:
+                      </p>
+                      <ol className="list-decimal list-inside space-y-1 text-gray-600 pl-1">
+                        <li>Open <span className="font-semibold text-gray-800">instagram.com</span> on your PC/Mac browser where you are logged in.</li>
+                        <li>Press <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[11px] font-mono">F12</kbd> (or Right Click &rarr; <strong>Inspect</strong>).</li>
+                        <li>Click the <strong>Application</strong> tab (in Chrome/Edge) or <strong>Storage</strong> tab (in Firefox).</li>
+                        <li>In the left sidebar under <strong>Cookies</strong>, click <code>https://www.instagram.com</code>.</li>
+                        <li>Find the cookie named <strong>sessionid</strong>, double-click its value, copy and paste it here!</li>
+                      </ol>
+                      <p className="text-[11px] text-emerald-700 font-medium pt-1">
+                        &check; Bypasses all IP rate limits (429) &amp; 2FA prompts immediately!
+                      </p>
+                    </div>
+                  )}
+
+                  <input
+                    className="form-input font-mono text-xs"
+                    type="text"
+                    placeholder="e.g. 6948291%3AbA7kQ9... or paste sessionid here"
+                    value={form.sessionId || form.password}
+                    onChange={(e) => setForm({ ...form, sessionId: e.target.value, password: e.target.value })}
+                    required
+                    autoComplete="off"
+                  />
+                  <p className="text-[11px] text-gray-400">
+                    Session cookie is AES-256 encrypted. It connects directly with zero risk of 429 block.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label className="form-label font-semibold text-gray-900">Password *</label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="Account password"
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    required
+                    autoComplete="off"
+                  />
+                  <p className="text-[11px] text-amber-600 mt-1">
+                    Tip: If cloud datacenter IP limit triggers, switch to the Session ID tab above.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <label className="form-label font-semibold text-gray-900">Password *</label>
+              <input
+                className="form-input"
+                type="text"
+                placeholder="Account password (encrypted with AES-256)"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                required
+                autoComplete="off"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                Passwords are military-grade AES-256 encrypted and stored safely.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="form-label">Profile / Page URL</label>
